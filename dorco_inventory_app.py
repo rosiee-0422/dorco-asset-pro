@@ -738,7 +738,7 @@ with col_main:
             st.toast(f"📦 발주 요청 {_pend_admin}건 대기 중", icon="🔔")
             st.session_state.admin_toast_shown = True
 
-        tab1, tab2, tab3 = st.tabs(["🆕 신규 품목 등록", "🗑️ 품목 / 분류 삭제", "🚨 데이터 초기화"])
+        tab1, tab_edit, tab2, tab3 = st.tabs(["🆕 신규 품목 등록", "✏️ 품목 수정", "🗑️ 품목 / 분류 삭제", "🚨 데이터 초기화"])
 
         with tab1:
             st.markdown('<p class="section-heading">새 비품 마스터 등록</p>', unsafe_allow_html=True)
@@ -781,6 +781,79 @@ with col_main:
                         st.success(f"✅ '{item_name}' 등록 완료!")
                         st.balloons()
                         st.rerun()
+
+        # ── 품목 수정 탭 ──
+        with tab_edit:
+            st.markdown('<p class="section-heading">등록된 품목 정보 수정</p>', unsafe_allow_html=True)
+
+            if info_df.empty:
+                st.info("등록된 품목이 없습니다.")
+            else:
+                # 대분류 → 품목 선택
+                edit_cats  = sorted(info_df["대분류"].dropna().unique().tolist())
+                edit_cat   = st.selectbox("대분류 선택", edit_cats, key="edit_cat")
+                edit_items = sorted(info_df[info_df["대분류"] == edit_cat]["품목"].dropna().unique().tolist())
+                edit_item  = st.selectbox("수정할 품목 선택", edit_items, key="edit_item")
+
+                # 선택 품목의 현재 값 조회
+                cur_info = info_df[
+                    (info_df["대분류"] == edit_cat) & (info_df["품목"] == edit_item)
+                ]
+                cur_inv = df[
+                    (df["대분류"] == edit_cat) & (df["품목"] == edit_item)
+                ]
+
+                if not cur_info.empty:
+                    ci = cur_info.iloc[0]
+                    info_id = int(ci["id"])
+                    inv_id  = int(cur_inv["id"].values[0]) if not cur_inv.empty else None
+
+                    st.caption("현재 값을 불러왔습니다. 수정 후 저장하세요.")
+
+                    with st.form("edit_item_form", clear_on_submit=False):
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            new_vendor = st.text_input(
+                                "구매처",
+                                value=str(ci.get("구매처", "") or ""),
+                            )
+                            new_unit = st.text_input(
+                                "수량 단위",
+                                value=str(ci.get("수량단위", "EA") or "EA"),
+                            )
+                            new_note = st.text_area(
+                                "비고",
+                                value=str(ci.get("비고", "") or ""),
+                            )
+                        with c2:
+                            new_safety = st.number_input(
+                                "안전재고",
+                                min_value=0,
+                                value=int(pd.to_numeric(ci.get("안전재고", 0), errors="coerce") or 0),
+                            )
+                            new_order_qty = st.number_input(
+                                "기본 발주수량",
+                                min_value=1,
+                                value=int(pd.to_numeric(ci.get("기본발주수량", 1), errors="coerce") or 1),
+                            )
+
+                        if st.form_submit_button("💾 수정 저장", use_container_width=True):
+                            # inventory_info 업데이트
+                            sb_update("inventory_info", info_id, {
+                                "구매처":     new_vendor,
+                                "수량단위":   new_unit,
+                                "안전재고":   new_safety,
+                                "기본발주수량": new_order_qty,
+                                "비고":       new_note,
+                            })
+                            # inventory 테이블도 단위·안전재고 동기화
+                            if inv_id:
+                                sb_update("inventory", inv_id, {
+                                    "수량단위": new_unit,
+                                    "안전재고": new_safety,
+                                })
+                            st.success(f"✅ '{edit_item}' 정보가 수정되었습니다.")
+                            st.rerun()
 
         with tab2:
             st.markdown('<p class="section-heading">품목 / 대분류 삭제</p>', unsafe_allow_html=True)
