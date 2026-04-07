@@ -515,8 +515,17 @@ with col_main:
         st.markdown('<p class="page-sub">현재고 실시간 조회 및 수정</p>', unsafe_allow_html=True)
 
         stock_df = prep_num(sb_select("inventory"), ["현재고", "안전재고"])
-        search   = st.text_input("🔍 품목 검색", placeholder="품목명을 입력하세요...")
-        disp     = stock_df.copy()
+
+        sf1, sf2 = st.columns([1, 2])
+        with sf1:
+            stock_cats    = ["전체"] + sorted(stock_df["대분류"].dropna().astype(str).unique().tolist()) if not stock_df.empty else ["전체"]
+            stock_cat_sel = st.selectbox("대분류 필터", stock_cats, key="stock_cat_filter")
+        with sf2:
+            search = st.text_input("🔍 품목 검색", placeholder="품목명을 입력하세요...")
+
+        disp = stock_df.copy()
+        if stock_cat_sel != "전체":
+            disp = disp[disp["대분류"] == stock_cat_sel]
         if search:
             disp = disp[disp["품목"].astype(str).str.contains(search, na=False)]
 
@@ -654,74 +663,84 @@ with col_main:
             prv_spent = df_in_stat[df_in_stat["년월"] == prv_m_str]["구매금액"].sum()
             diff      = cur_spent - prv_spent
 
-            m1, m2, m3 = st.columns(3)
-            m1.metric("당월 집행 금액", f"{int(cur_spent):,} 원")
-            m2.metric("전월 집행 금액", f"{int(prv_spent):,} 원")
-            m3.metric("전월 대비 증감", f"{int(diff):,} 원",
-                      delta=f"{int(diff):,} 원",
-                      delta_color="inverse" if diff > 0 else "normal")
+            # ── KPI 카드 + 당월 도넛 차트 나란히 ──
+            kpi_col, donut_col = st.columns([1, 1.4], gap="large")
 
-            st.divider()
-
-            st.markdown('<p class="section-heading">월별 사용금액 트렌드</p>', unsafe_allow_html=True)
-            monthly = df_in_stat.groupby("년월", as_index=False)["구매금액"].sum().sort_values("년월")
-            if not monthly.empty:
-                fig_bar = go.Figure(go.Bar(
-                    x=monthly["년월"], y=monthly["구매금액"],
-                    marker_color="#c07c3a", opacity=0.75,
-                    hovertemplate="%{x}<br>%{y:,.0f} 원<extra></extra>"
-                ))
-                fig_bar.update_layout(
-                    height=240, margin=dict(t=10,b=10,l=0,r=0),
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#8a7d6b", family="DM Sans"),
-                    xaxis=dict(showgrid=False, color="#b8ad9e"),
-                    yaxis=dict(showgrid=True, gridcolor="#e8e0d0", color="#b8ad9e"),
-                )
-                st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
-
-            st.divider()
-
-            st.markdown('<p class="section-heading">카테고리별 사용금액 비중</p>', unsafe_allow_html=True)
-            cat_sum = df_in_stat.groupby("대분류")["구매금액"].sum().reset_index().sort_values("구매금액", ascending=False)
-            fig_donut = go.Figure(go.Pie(
-                labels=cat_sum["대분류"], values=cat_sum["구매금액"], hole=0.6,
-                textinfo="label+percent",
-                hovertemplate="<b>%{label}</b><br>%{value:,.0f} 원<extra></extra>",
-                marker=dict(colors=["#c07c3a","#5c7a5c","#a0704a","#8a9e6c","#c4a882","#6b8f71"])
-            ))
-            fig_donut.update_layout(
-                height=320, margin=dict(t=10,b=10,l=10,r=10),
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#8a7d6b", family="DM Sans"),
-                legend=dict(orientation="h", y=-0.05, x=0.5, xanchor="center",
-                            font=dict(size=12, color="#8a7d6b"))
-            )
-            st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
-
-            st.divider()
-
-            st.markdown('<p class="section-heading">상세 입고 기록</p>', unsafe_allow_html=True)
-            cf1, cf2 = st.columns([2, 1])
-            with cf1:
-                month_list = ["전체"] + sorted(df_in_stat["년월"].unique().tolist(), reverse=True)
-                sel_month  = st.selectbox("조회 월", month_list)
-            with cf2:
+            with kpi_col:
+                st.metric("당월 집행 금액", f"{int(cur_spent):,} 원")
                 st.markdown("<br>", unsafe_allow_html=True)
-                csv_data = df_in_stat.to_csv(index=False, encoding="utf-8-sig")
-                st.download_button("📥 CSV 다운로드", data=csv_data,
-                                   file_name=f"report_{date.today()}.csv",
-                                   mime="text/csv", use_container_width=True)
-            disp_df = df_in_stat.copy()
-            if sel_month != "전체":
-                disp_df = disp_df[disp_df["년월"] == sel_month]
-            disp_df["입고일자"] = disp_df["입고일자"].dt.strftime("%Y-%m-%d")
+                st.metric("전월 대비 증감", f"{int(diff):,} 원",
+                          delta=f"{int(diff):,} 원",
+                          delta_color="inverse" if diff > 0 else "normal")
+
+            with donut_col:
+                cur_month_df = df_in_stat[df_in_stat["년월"] == cur_m_str]
+                st.markdown('<p class="section-heading">당월 카테고리별 비중</p>', unsafe_allow_html=True)
+                if not cur_month_df.empty:
+                    cur_cat = cur_month_df.groupby("대분류")["구매금액"].sum().reset_index().sort_values("구매금액", ascending=False)
+                    fig_cur = go.Figure(go.Pie(
+                        labels=cur_cat["대분류"], values=cur_cat["구매금액"],
+                        hole=0.6, textinfo="label+percent",
+                        hovertemplate="<b>%{label}</b><br>%{value:,.0f} 원<extra></extra>",
+                        marker=dict(colors=["#c07c3a","#5c7a5c","#a0704a","#8a9e6c","#c4a882","#6b8f71"])
+                    ))
+                    fig_cur.update_layout(
+                        height=260, margin=dict(t=10, b=0, l=0, r=0),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#8a7d6b", family="DM Sans"),
+                        showlegend=True,
+                        legend=dict(orientation="h", y=-0.08, x=0.5, xanchor="center",
+                                    font=dict(size=11, color="#8a7d6b"))
+                    )
+                    st.plotly_chart(fig_cur, use_container_width=True, config={"displayModeBar": False})
+                else:
+                    st.info("당월 데이터 없음")
+
+            st.divider()
+
+            # ── 상세 입고 기록 + 필터 + CSV ──
+            st.markdown('<p class="section-heading">상세 입고 기록</p>', unsafe_allow_html=True)
+
+            ff1, ff2, ff3 = st.columns([1.2, 1.2, 1])
+            with ff1:
+                month_list = ["전체"] + sorted(df_in_stat["년월"].unique().tolist(), reverse=True)
+                sel_month  = st.selectbox("월 필터", month_list, key="report_month")
+            with ff2:
+                cat_list_r = ["전체"] + sorted(df_in_stat["대분류"].dropna().unique().tolist())
+                sel_cat_r  = st.selectbox("대분류 필터", cat_list_r, key="report_cat")
+            with ff3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                # 필터 적용 후 다운로드
+                disp_df = df_in_stat.copy()
+                if sel_month != "전체":
+                    disp_df = disp_df[disp_df["년월"] == sel_month]
+                if sel_cat_r != "전체":
+                    disp_df = disp_df[disp_df["대분류"] == sel_cat_r]
+
+                fname_parts = []
+                if sel_month != "전체": fname_parts.append(sel_month)
+                if sel_cat_r != "전체": fname_parts.append(sel_cat_r)
+                fname = "입고기록_" + ("_".join(fname_parts) if fname_parts else "전체") + f"_{date.today()}.csv"
+
+                csv_data = disp_df[["입고일자","대분류","품목","입고수량","구매금액"]].sort_values("입고일자", ascending=False)
+                csv_data = csv_data.copy()
+                csv_data["입고일자"] = pd.to_datetime(csv_data["입고일자"], errors="coerce").dt.strftime("%Y-%m-%d")
+                st.download_button(
+                    "📥 CSV 다운로드",
+                    data=csv_data.to_csv(index=False, encoding="utf-8-sig"),
+                    file_name=fname, mime="text/csv",
+                    use_container_width=True
+                )
+
+            # 테이블
+            disp_df2 = disp_df.copy()
+            disp_df2["입고일자"] = pd.to_datetime(disp_df2["입고일자"], errors="coerce").dt.strftime("%Y-%m-%d")
             st.dataframe(
-                disp_df[["입고일자","대분류","품목","입고수량","구매금액"]].sort_values("입고일자", ascending=False),
+                disp_df2[["입고일자","대분류","품목","입고수량","구매금액"]].sort_values("입고일자", ascending=False),
                 use_container_width=True, hide_index=True,
                 column_config={
                     "구매금액": st.column_config.NumberColumn("구매금액", format="%d 원"),
-                    "입고수량": st.column_config.NumberColumn("수량", format="%d"),
+                    "입고수량": st.column_config.NumberColumn("수량",     format="%d"),
                 }
             )
 
