@@ -597,9 +597,14 @@ with col_main:
             with c2:
                 io_qty  = st.number_input("수량", min_value=1, step=1)
                 io_note = st.text_input("비고")
-            io_amount = 0
-            if mode == "입고":
-                io_amount = st.number_input("구매금액 (원)", min_value=0, step=100, value=0)
+
+            # 구매금액은 항상 폼 안에서 렌더링 — 입고 아닐 땐 disabled 처리
+            io_amount = st.number_input(
+                "구매금액 (원)",
+                min_value=0, step=100, value=0,
+                disabled=(mode != "입고"),
+                help="입고 처리 시에만 입력 가능합니다."
+            )
 
             submitted = st.form_submit_button(f"{icon} {mode} 확정", use_container_width=True)
             if submitted:
@@ -620,7 +625,7 @@ with col_main:
                             sb_insert("inventory_in", {
                                 "입고일자": io_date.strftime("%Y-%m-%d"),
                                 "대분류": sel_cat, "품목": io_item,
-                                "입고수량": io_qty, "구매금액": io_amount
+                                "입고수량": int(io_qty), "구매금액": int(io_amount)
                             })
                         else:
                             if curr_stock < io_qty:
@@ -633,9 +638,13 @@ with col_main:
                             sb_insert("inventory_out", {
                                 "출고일자": io_date.strftime("%Y-%m-%d"),
                                 "대분류": sel_cat, "품목": io_item,
-                                "출고수량": io_qty, "비고": io_note
+                                "출고수량": int(io_qty), "비고": io_note
                             })
-                        st.success(f"✅ {io_item} {io_qty}개 {mode} 처리 완료")
+                        # 성공 토스트 팝업
+                        if mode == "입고":
+                            st.toast(f"✅ {io_item} {io_qty}개 입고 완료 — {int(io_amount):,}원", icon="📥")
+                        else:
+                            st.toast(f"✅ {io_item} {io_qty}개 출고 완료", icon="📤")
                         st.rerun()
 
     # ══════════════════════════════════════════
@@ -824,7 +833,9 @@ with col_main:
             st.toast(f"📦 발주 요청 {_pend_admin}건 대기 중", icon="🔔")
             st.session_state.admin_toast_shown = True
 
-        tab1, tab_edit, tab2, tab3 = st.tabs(["🆕 신규 품목 등록", "✏️ 품목 수정", "🗑️ 품목 / 분류 삭제", "🚨 데이터 초기화"])
+        tab1, tab_edit, tab2, tab_in_del, tab3 = st.tabs([
+            "🆕 신규 품목 등록", "✏️ 품목 수정", "🗑️ 품목 / 분류 삭제", "📋 입고기록 삭제", "🚨 데이터 초기화"
+        ])
 
         with tab1:
             st.markdown('<p class="section-heading">새 비품 마스터 등록</p>', unsafe_allow_html=True)
@@ -978,6 +989,75 @@ with col_main:
                             st.error("삭제 확인 체크박스를 먼저 선택하세요.")
                 else:
                     st.info("삭제할 대분류가 없습니다.")
+
+        with tab_in_del:
+            st.markdown('<p class="section-heading">입고 기록 삭제</p>', unsafe_allow_html=True)
+            st.warning("삭제된 입고 기록은 복구할 수 없습니다. 재고 수량은 자동으로 조정되지 않으니 필요 시 Stock Board에서 수동 수정하세요.")
+
+            df_in_del = sb_select("inventory_in")
+
+            if df_in_del.empty:
+                st.info("삭제할 입고 기록이 없습니다.")
+            else:
+                df_in_del["입고일자"] = pd.to_datetime(df_in_del["입고일자"], errors="coerce")
+                df_in_del = df_in_del.dropna(subset=["입고일자"])
+                df_in_del["년월"] = df_in_del["입고일자"].dt.to_period("M").astype(str)
+                df_in_del["입고수량"] = pd.to_numeric(df_in_del["입고수량"], errors="coerce").fillna(0).astype(int)
+                df_in_del["구매금액"] = pd.to_numeric(df_in_del["구매금액"], errors="coerce").fillna(0).astype(int)
+
+                # ── 필터 ──
+                fd1, fd2, fd3 = st.columns(3)
+                with fd1:
+                    del_month_list = ["전체"] + sorted(df_in_del["년월"].unique().tolist(), reverse=True)
+                    del_sel_month  = st.selectbox("월 선택", del_month_list, key="del_in_month")
+                with fd2:
+                    del_cat_list = ["전체"] + sorted(df_in_del["대분류"].dropna().unique().tolist())
+                    del_sel_cat  = st.selectbox("대분류 선택", del_cat_list, key="del_in_cat")
+                with fd3:
+                    # 대분류 필터 적용 후 품목 목록 동적 생성
+                    _tmp = df_in_del.copy()
+                    if del_sel_cat != "전체":
+                        _tmp = _tmp[_tmp["대분류"] == del_sel_cat]
+                    del_item_list = ["전체"] + sorted(_tmp["품목"].dropna().unique().tolist())
+                    del_sel_item  = st.selectbox("품목 선택", del_item_list, key="del_in_item")
+
+                # 필터 적용
+                df_filtered = df_in_del.copy()
+                if del_sel_month != "전체":
+                    df_filtered = df_filtered[df_filtered["년월"] == del_sel_month]
+                if del_sel_cat != "전체":
+                    df_filtered = df_filtered[df_filtered["대분류"] == del_sel_cat]
+                if del_sel_item != "전체":
+                    df_filtered = df_filtered[df_filtered["품목"] == del_sel_item]
+
+                # 필터된 결과 미리보기
+                if df_filtered.empty:
+                    st.info("선택한 조건에 해당하는 입고 기록이 없습니다.")
+                else:
+                    preview = df_filtered.copy()
+                    preview["입고일자"] = preview["입고일자"].dt.strftime("%Y-%m-%d")
+                    st.caption(f"삭제 대상: **{len(df_filtered)}건**")
+                    st.dataframe(
+                        preview[["입고일자","대분류","품목","입고수량","구매금액"]].sort_values("입고일자", ascending=False),
+                        use_container_width=True, hide_index=True,
+                        column_config={
+                            "구매금액": st.column_config.NumberColumn(format="%d 원"),
+                            "입고수량": st.column_config.NumberColumn(format="%d"),
+                        }
+                    )
+
+                    confirm_del_in = st.checkbox(
+                        f"위 {len(df_filtered)}건의 입고 기록을 삭제하겠습니다.",
+                        key="confirm_del_in"
+                    )
+                    if st.button("🗑️ 입고기록 삭제", key="btn_del_in", disabled=not confirm_del_in):
+                        ids_to_delete = df_filtered["id"].astype(int).tolist()
+                        try:
+                            sb.table("inventory_in").delete().in_("id", ids_to_delete).execute()
+                            st.toast(f"✅ {len(ids_to_delete)}건 삭제 완료", icon="🗑️")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"삭제 실패: {e}")
 
         with tab3:
             st.markdown('<p class="section-heading">시스템 데이터 초기화</p>', unsafe_allow_html=True)
