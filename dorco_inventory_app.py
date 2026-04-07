@@ -699,76 +699,73 @@ with col_main:
             # ── 섹션 2: 대분류별 분석 탭 ──
             st.markdown('<p class="section-heading">대분류별 상세 분석</p>', unsafe_allow_html=True)
 
-            all_cats_r = sorted(df_in_stat["대분류"].dropna().unique().tolist())
-            # 탭이 너무 많아지지 않도록 전체 탭 포함
+            all_cats_r  = sorted(df_in_stat["대분류"].dropna().unique().tolist())
+            all_months  = sorted(df_in_stat["년월"].unique().tolist())  # 오름차순
+
+            # 기준 기간 설정 — 시작월 ~ 종료월 슬라이더
+            if len(all_months) >= 2:
+                pr1, pr2 = st.columns(2)
+                with pr1:
+                    start_m = st.selectbox(
+                        "분석 시작 월", all_months,
+                        index=0, key="analysis_start"
+                    )
+                with pr2:
+                    # 종료월 후보 = 시작월 이후만
+                    end_candidates = [m for m in all_months if m >= start_m]
+                    end_m = st.selectbox(
+                        "분석 종료 월", end_candidates,
+                        index=len(end_candidates) - 1, key="analysis_end"
+                    )
+            else:
+                start_m = all_months[0] if all_months else cur_m_str
+                end_m   = start_m
+
+            # 기간 필터 적용
+            df_period = df_in_stat[
+                (df_in_stat["년월"] >= start_m) & (df_in_stat["년월"] <= end_m)
+            ].copy()
+
+            n_months_period = df_period["년월"].nunique()
+            n_months_period = max(n_months_period, 1)
+
+            st.caption(f"📅 기준 기간: **{start_m} ~ {end_m}** ({n_months_period}개월)")
+
             cat_tabs = st.tabs(["📋 전체"] + [f"  {c}  " for c in all_cats_r])
 
-            # 분석에 사용할 월 수 (평균 계산 기준)
-            total_months = df_in_stat["년월"].nunique()
-            total_months = max(total_months, 1)
-
-            def render_cat_analysis(data: pd.DataFrame, label: str):
-                """대분류 하나에 대한 분석 블록"""
+            def render_cat_analysis(data: pd.DataFrame, label: str, n_months: int):
+                """대분류 하나에 대한 분석 블록 — 그래프 없이 테이블만"""
                 if data.empty:
                     st.info(f"{label} 데이터가 없습니다.")
                     return
 
-                n_months = data["년월"].nunique()
-                n_months = max(n_months, 1)
-
-                # 품목별 집계: 총 입고수량, 총 구매금액, 월평균 소진량, 월평균 금액
                 item_agg = (
                     data.groupby("품목", as_index=False)
-                    .agg(총입고수량=("입고수량","sum"), 총구매금액=("구매금액","sum"))
+                    .agg(총입고수량=("입고수량", "sum"), 총구매금액=("구매금액", "sum"))
                 )
                 item_agg["월평균소진량"] = (item_agg["총입고수량"] / n_months).round(1)
                 item_agg["월평균금액"]   = (item_agg["총구매금액"]  / n_months).apply(lambda x: int(round(x)))
                 item_agg = item_agg.sort_values("총구매금액", ascending=False)
 
-                # 좌: 품목별 요약 테이블 / 우: 월별 금액 추이
-                left_c, right_c = st.columns([1.1, 1], gap="medium")
+                show = item_agg[["품목","월평균소진량","월평균금액","총입고수량","총구매금액"]].copy()
+                show.columns = ["품목", "월평균 소진량", "월평균 금액(원)", "총 입고수량", "누적 금액(원)"]
+                st.dataframe(
+                    show,
+                    use_container_width=True, hide_index=True,
+                    column_config={
+                        "월평균 소진량":   st.column_config.NumberColumn(format="%.1f"),
+                        "월평균 금액(원)": st.column_config.NumberColumn(format="%d 원"),
+                        "총 입고수량":     st.column_config.NumberColumn(format="%d"),
+                        "누적 금액(원)":   st.column_config.NumberColumn(format="%d 원"),
+                    }
+                )
 
-                with left_c:
-                    st.caption(f"기준 기간: {n_months}개월")
-                    show = item_agg[["품목","월평균소진량","월평균금액","총구매금액"]].copy()
-                    show.columns = ["품목", "월평균 소진량", "월평균 금액(원)", "누적 금액(원)"]
-                    st.dataframe(
-                        show,
-                        use_container_width=True, hide_index=True,
-                        column_config={
-                            "월평균 소진량":  st.column_config.NumberColumn(format="%.1f"),
-                            "월평균 금액(원)": st.column_config.NumberColumn(format="%d 원"),
-                            "누적 금액(원)":   st.column_config.NumberColumn(format="%d 원"),
-                        }
-                    )
-
-                with right_c:
-                    monthly_trend = (
-                        data.groupby("년월", as_index=False)["구매금액"].sum().sort_values("년월")
-                    )
-                    fig_trend = go.Figure(go.Bar(
-                        x=monthly_trend["년월"], y=monthly_trend["구매금액"],
-                        marker_color="#c07c3a", opacity=0.72,
-                        hovertemplate="%{x}<br>%{y:,.0f} 원<extra></extra>"
-                    ))
-                    fig_trend.update_layout(
-                        height=220, margin=dict(t=10, b=10, l=0, r=0),
-                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#8a7d6b", family="DM Sans"),
-                        xaxis=dict(showgrid=False, color="#b8ad9e", tickangle=-30),
-                        yaxis=dict(showgrid=True, gridcolor="#e8e0d0", color="#b8ad9e"),
-                    )
-                    st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False})
-
-            # 전체 탭
             with cat_tabs[0]:
-                render_cat_analysis(df_in_stat, "전체")
+                render_cat_analysis(df_period, "전체", n_months_period)
 
-            # 대분류별 탭
             for i, cat in enumerate(all_cats_r):
                 with cat_tabs[i + 1]:
-                    cat_data = df_in_stat[df_in_stat["대분류"] == cat]
-                    render_cat_analysis(cat_data, cat)
+                    render_cat_analysis(df_period[df_period["대분류"] == cat], cat, n_months_period)
 
             st.divider()
 
