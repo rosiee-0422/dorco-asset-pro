@@ -596,9 +596,13 @@ with col_main:
         st.markdown(f'<p class="page-title">{icon} {mode} 관리</p>', unsafe_allow_html=True)
         st.markdown(f'<p class="page-sub">{mode} 처리 및 재고 자동 반영</p>', unsafe_allow_html=True)
 
-        if not info_df.empty:
-            all_cats  = sorted(info_df["대분류"].dropna().unique().tolist())
-            sel_cat   = st.selectbox("대분류 선택", all_cats, key="io_cat")
+    if not info_df.empty:
+            all_cats = info_df["대분류"].dropna().astype(str).unique().tolist()
+            # ── 카테고리 순서 고정: 미화용품 → 식음료류 → 기타 → 춘추복 ──
+            priority = ["미화용품", "식음료류", "기타", "춘추복"]
+            sorted_cats = [c for c in priority if c in all_cats] + \
+                          sorted([c for c in all_cats if c not in priority])
+            sel_cat   = st.selectbox("대분류 선택", sorted_cats, key="io_cat")
             rel_items = sorted(info_df[info_df["대분류"] == sel_cat]["품목"].dropna().tolist())
         else:
             sel_cat, rel_items = st.text_input("대분류 직접 입력"), []
