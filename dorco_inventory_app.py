@@ -1086,7 +1086,8 @@ with col_main:
             <p>필요한 비품을 선택하고 요청 버튼을 누르세요</p>
         </div>
         """, unsafe_allow_html=True)
-     if info_df.empty:
+
+        if info_df.empty:
             st.warning("등록된 품목이 없습니다. 관리자에게 문의하세요.")
         else:
             all_cats = info_df["대분류"].dropna().astype(str).unique().tolist()
@@ -1100,12 +1101,11 @@ with col_main:
             items_in_cat = sorted(
                 info_df[info_df["대분류"] == sel_cat]["품목"].dropna().astype(str).unique().tolist()
             )
-            
             # ── 핸드티슈를 맨 위로 ──
             if "핸드티슈" in items_in_cat:
                 items_in_cat.remove("핸드티슈")
                 items_in_cat.insert(0, "핸드티슈")
-             
+
             with st.form("request_form", clear_on_submit=True):
                 sel_item  = st.selectbox("품목 선택", items_in_cat, key="req_item")
                 item_info = info_df[(info_df["대분류"] == sel_cat) & (info_df["품목"] == sel_item)]
@@ -1151,7 +1151,6 @@ with col_main:
             if today_reqs.empty:
                 st.info("아직 오늘 요청한 내역이 없습니다.")
             else:
-                # 헤더
                 h1, h2, h3, h4, h5 = st.columns([1.2, 1.3, 2.8, 1.3, 0.6])
                 h1.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>시간</small>", unsafe_allow_html=True)
                 h2.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>분류</small>", unsafe_allow_html=True)
@@ -1161,7 +1160,7 @@ with col_main:
 
                 for _, r in today_reqs.iterrows():
                     c1, c2, c3, c4, c5 = st.columns([1.2, 1.3, 2.8, 1.3, 0.6])
-                    raw_time = str(r["요청일시"])
+                    raw_time  = str(r["요청일시"])
                     time_only = raw_time[11:16] if len(raw_time) >= 16 else "—"
                     qty_val   = int(pd.to_numeric(r["요청수량"], errors="coerce") or 0)
 
@@ -1171,7 +1170,7 @@ with col_main:
 
                     if r["상태"] == "처리완료":
                         c4.markdown("🟢 처리완료")
-                        c5.markdown("✓")  # 이미 처리된 건은 삭제 불가
+                        c5.markdown("✓")
                     else:
                         c4.markdown("🟡 대기중")
                         if c5.button("❌", key=f"del_my_req_{r['id']}", help="요청 취소"):
