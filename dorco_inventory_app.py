@@ -1090,21 +1090,26 @@ with col_main:
         if info_df.empty:
             st.warning("등록된 품목이 없습니다. 관리자에게 문의하세요.")
         else:
-            cat_list     = sorted(info_df["대분류"].dropna().astype(str).unique().tolist())
-            sel_cat      = st.selectbox("카테고리", cat_list, key="req_cat")
-            items_in_cat = sorted(info_df[info_df["대분류"] == sel_cat]["품목"].dropna().astype(str).unique().tolist())
+            cat_list = sorted(info_df["대분류"].dropna().astype(str).unique().tolist())
+            # ── 기본 카테고리: 미화용품 ──
+            default_cat_idx = cat_list.index("미화용품") if "미화용품" in cat_list else 0
+            sel_cat = st.selectbox("카테고리", cat_list, index=default_cat_idx, key="req_cat")
+
+            items_in_cat = sorted(
+                info_df[info_df["대분류"] == sel_cat]["품목"].dropna().astype(str).unique().tolist()
+            )
+            # ── 핸드티슈를 맨 위로 ──
+            if "핸드티슈" in items_in_cat:
+                items_in_cat.remove("핸드티슈")
+                items_in_cat.insert(0, "핸드티슈")
 
             with st.form("request_form", clear_on_submit=True):
                 sel_item  = st.selectbox("품목 선택", items_in_cat, key="req_item")
                 item_info = info_df[(info_df["대분류"] == sel_cat) & (info_df["품목"] == sel_item)]
                 unit_val  = item_info["수량단위"].values[0] if not item_info.empty and "수량단위" in item_info.columns else ""
-                def_qty   = (
-                    int(pd.to_numeric(item_info["기본발주수량"].values[0], errors="coerce"))
-                    if not item_info.empty and "기본발주수량" in item_info.columns
-                    and pd.notna(item_info["기본발주수량"].values[0]) else 1
-                )
 
-                req_qty  = st.number_input(f"요청 수량 ({unit_val})", min_value=1, value=def_qty, step=1)
+                # ── 기본 요청 수량 14 ──
+                req_qty  = st.number_input(f"요청 수량 ({unit_val})", min_value=1, value=14, step=1)
                 req_note = st.text_input("전달 사항 (선택)", placeholder="예: 빨리 필요해요")
 
                 if st.form_submit_button("🚀 발주 요청하기", use_container_width=True):
@@ -1124,3 +1129,52 @@ with col_main:
                             "요청이 접수되었습니다!\n\n관리자에게 알림이 전송됩니다."
                         )
                         st.toast("📦 발주 요청 접수 완료", icon="✅")
+
+            # ─────────────────────────────────────
+            # 📋 오늘 요청한 내역 (당일만)
+            # ─────────────────────────────────────
+            st.divider()
+            st.markdown('<p class="section-heading">📋 오늘 요청한 내역</p>', unsafe_allow_html=True)
+
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            all_reqs  = sb_select("order_requests")
+
+            today_reqs = pd.DataFrame()
+            if not all_reqs.empty and "요청일시" in all_reqs.columns:
+                today_reqs = all_reqs[
+                    all_reqs["요청일시"].astype(str).str.startswith(today_str)
+                ].copy().sort_values("요청일시", ascending=False)
+
+            if today_reqs.empty:
+                st.info("아직 오늘 요청한 내역이 없습니다.")
+            else:
+                # 헤더
+                h1, h2, h3, h4, h5 = st.columns([1.2, 1.3, 2.8, 1.3, 0.6])
+                h1.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>시간</small>", unsafe_allow_html=True)
+                h2.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>분류</small>", unsafe_allow_html=True)
+                h3.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>품목 · 수량</small>", unsafe_allow_html=True)
+                h4.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>상태</small>", unsafe_allow_html=True)
+                h5.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>취소</small>", unsafe_allow_html=True)
+
+                for _, r in today_reqs.iterrows():
+                    c1, c2, c3, c4, c5 = st.columns([1.2, 1.3, 2.8, 1.3, 0.6])
+                    raw_time = str(r["요청일시"])
+                    time_only = raw_time[11:16] if len(raw_time) >= 16 else "—"
+                    qty_val   = int(pd.to_numeric(r["요청수량"], errors="coerce") or 0)
+
+                    c1.markdown(f"🕘 **{time_only}**")
+                    c2.markdown(f"{r['대분류']}")
+                    c3.markdown(f"**{r['품목']}** × {qty_val}")
+
+                    if r["상태"] == "처리완료":
+                        c4.markdown("🟢 처리완료")
+                        c5.markdown("✓")  # 이미 처리된 건은 삭제 불가
+                    else:
+                        c4.markdown("🟡 대기중")
+                        if c5.button("❌", key=f"del_my_req_{r['id']}", help="요청 취소"):
+                            try:
+                                sb.table("order_requests").delete().eq("id", int(r["id"])).execute()
+                                st.toast(f"🗑️ {r['품목']} 요청이 취소되었습니다", icon="✅")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"취소 실패: {e}")
