@@ -586,7 +586,7 @@ with col_main:
                     sb_update("inventory", row_id, fields)
                     st.success(f"✅ {adj_item} 재고가 {new_qty}개로 수정되었습니다.")
                     st.rerun()
-
+  
     # ══════════════════════════════════════════
     # 📥📤 INBOUND / OUTBOUND
     # ══════════════════════════════════════════
@@ -596,7 +596,7 @@ with col_main:
         st.markdown(f'<p class="page-title">{icon} {mode} 관리</p>', unsafe_allow_html=True)
         st.markdown(f'<p class="page-sub">{mode} 처리 및 재고 자동 반영</p>', unsafe_allow_html=True)
 
-    if not info_df.empty:
+        if not info_df.empty:
             all_cats = info_df["대분류"].dropna().astype(str).unique().tolist()
             # ── 카테고리 순서 고정: 미화용품 → 식음료류 → 기타 → 춘추복 ──
             priority = ["미화용품", "식음료류", "기타", "춘추복"]
@@ -607,63 +607,168 @@ with col_main:
         else:
             sel_cat, rel_items = st.text_input("대분류 직접 입력"), []
 
-        with st.form("inout_form", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            with c1:
-                io_date = st.date_input("날짜", date.today())
-                io_item = st.selectbox("품목 선택", rel_items if rel_items else ["품목 없음"])
-            with c2:
-                io_qty  = st.number_input("수량", min_value=1, step=1)
-                io_note = st.text_input("비고")
+        # ── 기본 입력 ──
+        c1, c2 = st.columns(2)
+        with c1:
+            io_date = st.date_input("날짜", date.today())
+            io_item = st.selectbox("품목 선택", rel_items if rel_items else ["품목 없음"])
+        with c2:
+            io_qty  = st.number_input("수량", min_value=1, step=1, value=1)
+            io_note = st.text_input("비고")
 
-            # 구매금액은 항상 폼 안에서 렌더링 — 입고 아닐 땐 disabled 처리
-            io_amount = st.number_input(
-                "구매금액 (원)",
-                min_value=0, step=100, value=0,
-                disabled=(mode != "입고"),
-                help="입고 처리 시에만 입력 가능합니다."
-            )
+        # ── 입고 모드: 단가 입력 + 자동 합계 ──
+        if mode == "입고":
+            uc1, uc2 = st.columns([1, 1])
+            with uc1:
+                io_unit_price = st.number_input(
+                    "단가 (원)", min_value=0, step=100, value=0,
+                    help="단가를 입력하면 합계가 자동 계산됩니다."
+                )
+            io_amount = int(io_qty) * int(io_unit_price)
+            with uc2:
+                st.markdown(f"""
+                <div style="
+                    background: #fff9ef;
+                    border: 1px solid #e8e0d0;
+                    border-radius: 10px;
+                    padding: 10px 18px;
+                    margin-top: 28px;
+                    height: 44px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                ">
+                    <span style="font-size: 11px; color: #b8ad9e; letter-spacing: 0.1em; text-transform: uppercase;">
+                        합계 금액
+                    </span>
+                    <span style="font-family: 'DM Mono', monospace; font-size: 18px; color: #c07c3a; font-weight: 600;">
+                        {io_amount:,} 원
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+            st.caption(f"📐 {int(io_qty):,}개 × {int(io_unit_price):,}원 = **{io_amount:,}원**")
+        else:
+            io_amount = 0
 
-            submitted = st.form_submit_button(f"{icon} {mode} 확정", use_container_width=True)
-            if submitted:
-                if not rel_items or io_item == "품목 없음":
-                    st.error("품목을 선택해주세요.")
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ── 확정 버튼 ──
+        if st.button(f"{icon} {mode} 확정", use_container_width=True, key="io_submit"):
+            if not rel_items or io_item == "품목 없음":
+                st.error("품목을 선택해주세요.")
+            else:
+                inv_row = df[(df["대분류"] == sel_cat) & (df["품목"] == io_item)]
+                if inv_row.empty:
+                    st.error("재고 마스터에 해당 품목이 없습니다.")
                 else:
-                    inv_row = df[(df["대분류"] == sel_cat) & (df["품목"] == io_item)]
-                    if inv_row.empty:
-                        st.error("재고 마스터에 해당 품목이 없습니다.")
+                    row_id     = int(inv_row["id"].values[0])
+                    curr_stock = int(inv_row["현재고"].values[0])
+                    if mode == "입고":
+                        sb_update("inventory", row_id, {
+                            "현재고": curr_stock + io_qty,
+                            "최근입고일": io_date.strftime("%Y-%m-%d")
+                        })
+                        sb_insert("inventory_in", {
+                            "입고일자": io_date.strftime("%Y-%m-%d"),
+                            "대분류": sel_cat, "품목": io_item,
+                            "입고수량": int(io_qty), "구매금액": int(io_amount)
+                        })
                     else:
-                        row_id     = int(inv_row["id"].values[0])
-                        curr_stock = int(inv_row["현재고"].values[0])
-                        if mode == "입고":
-                            sb_update("inventory", row_id, {
-                                "현재고": curr_stock + io_qty,
-                                "최근입고일": io_date.strftime("%Y-%m-%d")
-                            })
-                            sb_insert("inventory_in", {
-                                "입고일자": io_date.strftime("%Y-%m-%d"),
-                                "대분류": sel_cat, "품목": io_item,
-                                "입고수량": int(io_qty), "구매금액": int(io_amount)
-                            })
-                        else:
-                            if curr_stock < io_qty:
-                                st.error(f"재고 부족 — 현재고: {curr_stock}개")
-                                st.stop()
-                            sb_update("inventory", row_id, {
-                                "현재고": curr_stock - io_qty,
-                                "최근출고일": io_date.strftime("%Y-%m-%d")
-                            })
-                            sb_insert("inventory_out", {
-                                "출고일자": io_date.strftime("%Y-%m-%d"),
-                                "대분류": sel_cat, "품목": io_item,
-                                "출고수량": int(io_qty), "비고": io_note
-                            })
-                        # 성공 토스트 팝업
-                        if mode == "입고":
-                            st.toast(f"✅ {io_item} {io_qty}개 입고 완료 — {int(io_amount):,}원", icon="📥")
-                        else:
-                            st.toast(f"✅ {io_item} {io_qty}개 출고 완료", icon="📤")
-                        st.rerun()
+                        if curr_stock < io_qty:
+                            st.error(f"재고 부족 — 현재고: {curr_stock}개")
+                            st.stop()
+                        sb_update("inventory", row_id, {
+                            "현재고": curr_stock - io_qty,
+                            "최근출고일": io_date.strftime("%Y-%m-%d")
+                        })
+                        sb_insert("inventory_out", {
+                            "출고일자": io_date.strftime("%Y-%m-%d"),
+                            "대분류": sel_cat, "품목": io_item,
+                            "출고수량": int(io_qty), "비고": io_note
+                        })
+
+                    # ── 성공 팝업 ──
+                    if mode == "입고":
+                        popup_msg   = f"{io_item} {io_qty}개 입고 완료"
+                        popup_sub   = f"구매금액 {int(io_amount):,}원"
+                        popup_icon  = "📥"
+                        popup_color = "#5c7a5c"
+                    else:
+                        popup_msg   = f"{io_item} {io_qty}개 출고 완료"
+                        popup_sub   = "재고가 정상 차감되었습니다"
+                        popup_icon  = "📤"
+                        popup_color = "#c07c3a"
+
+                    st.markdown(f"""
+                    <style>
+                    @keyframes popIn {{
+                        0%   {{ opacity: 0; transform: translate(-50%, -50%) scale(0.85); }}
+                        60%  {{ opacity: 1; transform: translate(-50%, -50%) scale(1.04); }}
+                        100% {{ opacity: 1; transform: translate(-50%, -50%) scale(1); }}
+                    }}
+                    @keyframes popOut {{
+                        0%   {{ opacity: 1; transform: translate(-50%, -50%) scale(1); }}
+                        100% {{ opacity: 0; transform: translate(-50%, -50%) scale(0.92); }}
+                    }}
+                    @keyframes overlayFade {{
+                        0%   {{ opacity: 0; }}
+                        100% {{ opacity: 1; }}
+                    }}
+                    .success-overlay {{
+                        position: fixed; top: 0; left: 0;
+                        width: 100vw; height: 100vh;
+                        background: rgba(44, 36, 22, 0.35);
+                        backdrop-filter: blur(4px);
+                        z-index: 99998;
+                        animation: overlayFade 0.25s ease-out forwards,
+                                   overlayFade 0.3s ease-in 1.5s reverse forwards;
+                    }}
+                    .success-popup {{
+                        position: fixed; top: 50%; left: 50%;
+                        transform: translate(-50%, -50%);
+                        background: #fff9ef;
+                        border: 1px solid #e8e0d0;
+                        border-radius: 20px;
+                        padding: 36px 56px;
+                        box-shadow: 0 20px 60px rgba(44,36,22,0.25);
+                        text-align: center;
+                        z-index: 99999;
+                        min-width: 320px;
+                        animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+                                   popOut 0.3s ease-in 1.5s forwards;
+                    }}
+                    .success-popup .icon-circle {{
+                        width: 64px; height: 64px;
+                        background: {popup_color};
+                        border-radius: 50%;
+                        margin: 0 auto 18px;
+                        display: flex; align-items: center; justify-content: center;
+                        font-size: 30px;
+                    }}
+                    .success-popup .msg {{
+                        font-family: 'Fraunces', serif;
+                        font-size: 20px; font-weight: 400;
+                        color: #2c2416;
+                        margin-bottom: 6px;
+                        letter-spacing: -0.01em;
+                    }}
+                    .success-popup .sub {{
+                        font-size: 13px;
+                        color: #8a7d6b;
+                        font-family: 'DM Sans', sans-serif;
+                    }}
+                    </style>
+                    <div class="success-overlay"></div>
+                    <div class="success-popup">
+                        <div class="icon-circle">{popup_icon}</div>
+                        <div class="msg">{popup_msg}</div>
+                        <div class="sub">{popup_sub}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    import time
+                    time.sleep(1.8)
+                    st.rerun()
 
     # ══════════════════════════════════════════
     # 📊 INSIGHT REPORT
