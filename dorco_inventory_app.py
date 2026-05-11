@@ -1086,23 +1086,26 @@ with col_main:
             <p>필요한 비품을 선택하고 요청 버튼을 누르세요</p>
         </div>
         """, unsafe_allow_html=True)
-
-        if info_df.empty:
+     if info_df.empty:
             st.warning("등록된 품목이 없습니다. 관리자에게 문의하세요.")
         else:
-            cat_list = sorted(info_df["대분류"].dropna().astype(str).unique().tolist())
-            # ── 기본 카테고리: 미화용품 ──
-            default_cat_idx = cat_list.index("미화용품") if "미화용품" in cat_list else 0
-            sel_cat = st.selectbox("카테고리", cat_list, index=default_cat_idx, key="req_cat")
+            all_cats = info_df["대분류"].dropna().astype(str).unique().tolist()
+            # ── 카테고리 순서 고정: 미화용품 → 식음료류 → 기타 → 근무복 ──
+            priority = ["미화용품", "식음료류", "기타", "근무복"]
+            cat_list = [c for c in priority if c in all_cats] + \
+                       sorted([c for c in all_cats if c not in priority])
+
+            sel_cat = st.selectbox("카테고리", cat_list, index=0, key="req_cat")
 
             items_in_cat = sorted(
                 info_df[info_df["대분류"] == sel_cat]["품목"].dropna().astype(str).unique().tolist()
             )
+            
             # ── 핸드티슈를 맨 위로 ──
             if "핸드티슈" in items_in_cat:
                 items_in_cat.remove("핸드티슈")
                 items_in_cat.insert(0, "핸드티슈")
-
+             
             with st.form("request_form", clear_on_submit=True):
                 sel_item  = st.selectbox("품목 선택", items_in_cat, key="req_item")
                 item_info = info_df[(info_df["대분류"] == sel_cat) & (info_df["품목"] == sel_item)]
