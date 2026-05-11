@@ -427,22 +427,36 @@ with col_main:
             if pending_df.empty:
                 st.success("처리 대기 중인 발주 요청이 없습니다.")
             else:
-                show_cols = [c for c in ["요청일시","대분류","품목","요청수량","비고"] if c in pending_df.columns]
-                st.dataframe(
-                    pending_df.sort_values("요청일시", ascending=False)[show_cols].head(10),
-                    use_container_width=True, hide_index=True,
-                )
-                if pending_df.shape[0] <= 6:
-                    st.markdown("**빠른 처리**")
-                    cols_btn = st.columns(min(3, len(pending_df)))
-                    for (_, row), col in zip(pending_df.iterrows(), cols_btn):
-                        with col:
-                            if st.button(f"✓ {row['품목']}", key=f"req_{row['id']}", use_container_width=True):
-                                sb_update("order_requests", int(row["id"]), {"상태": "처리완료"})
-                                st.success(f"{row['품목']} 처리 완료")
-                                st.rerun()
+                # 헤더
+                h1, h2, h3, h4, h5 = st.columns([1.6, 1.2, 3.0, 0.6, 0.6])
+                h1.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>요청일시</small>", unsafe_allow_html=True)
+                h2.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>분류</small>", unsafe_allow_html=True)
+                h3.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>품목 · 수량 · 비고</small>", unsafe_allow_html=True)
+                h4.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>승인</small>", unsafe_allow_html=True)
+                h5.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>거절</small>", unsafe_allow_html=True)
 
-        st.divider()
+                for _, row in pending_df.sort_values("요청일시", ascending=False).head(10).iterrows():
+                    c1, c2, c3, c4, c5 = st.columns([1.6, 1.2, 3.0, 0.6, 0.6])
+                    qty_val   = int(pd.to_numeric(row.get("요청수량", 0), errors="coerce") or 0)
+                    note_val  = str(row.get("비고", "") or "").strip()
+                    note_disp = f" — _{note_val}_" if note_val else ""
+
+                    c1.markdown(f"🕘 {row['요청일시']}")
+                    c2.markdown(f"{row['대분류']}")
+                    c3.markdown(f"**{row['품목']}** × {qty_val}{note_disp}")
+
+                    if c4.button("✓", key=f"approve_{row['id']}", help="승인 처리", use_container_width=True):
+                        sb_update("order_requests", int(row["id"]), {"상태": "처리완료"})
+                        st.toast(f"✅ {row['품목']} 처리 완료", icon="✅")
+                        st.rerun()
+
+                    if c5.button("❌", key=f"reject_{row['id']}", help="요청 거절", use_container_width=True):
+                        sb_update("order_requests", int(row["id"]), {"상태": "거절"})
+                        st.toast(f"🚫 {row['품목']} 요청 거절", icon="🚫")
+                        st.rerun()
+
+                if len(pending_df) > 10:
+                    st.caption(f"… 외 {len(pending_df) - 10}건 더 있음")
 
         df_in = sb_select("inventory_in")
         today = datetime.now()
@@ -1171,6 +1185,9 @@ with col_main:
                     if r["상태"] == "처리완료":
                         c4.markdown("🟢 처리완료")
                         c5.markdown("✓")
+                    elif r["상태"] == "거절":
+                        c4.markdown("🔴 거절됨")
+                        c5.markdown("✕")
                     else:
                         c4.markdown("🟡 대기중")
                         if c5.button("❌", key=f"del_my_req_{r['id']}", help="요청 취소"):
