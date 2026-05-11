@@ -91,6 +91,28 @@ def prep_num(df: pd.DataFrame, cols: list) -> pd.DataFrame:
     return df
 
 # ─────────────────────────────────────────────
+# 5-1. 일일 정리 — 어제 이전 발주 요청 자동 삭제
+# ─────────────────────────────────────────────
+def cleanup_old_requests():
+    """당일 이전의 발주 요청을 DB에서 영구 삭제 — 하루 1회만 실행."""
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    # 오늘 이미 청소했으면 건너뛰기
+    if st.session_state.get("last_cleanup_date") == today_str:
+        return
+
+    try:
+        # 요청일시가 오늘 날짜로 시작하지 않는 모든 행 삭제
+        sb.table("order_requests").delete().lt("요청일시", today_str).execute()
+        st.session_state.last_cleanup_date = today_str
+    except Exception:
+        # 청소 실패해도 앱은 정상 동작해야 함
+        pass
+
+# 앱 시작 시 1회 실행
+cleanup_old_requests()
+
+# ─────────────────────────────────────────────
 # 5. 중복 발주 방지
 # ─────────────────────────────────────────────
 def is_duplicate_request(cat: str, item: str, minutes: int = 30) -> bool:
