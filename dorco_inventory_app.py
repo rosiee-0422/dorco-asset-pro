@@ -1236,7 +1236,6 @@ with col_main:
             st.warning("등록된 품목이 없습니다. 관리자에게 문의하세요.")
         else:
             all_cats = info_df["대분류"].dropna().astype(str).unique().tolist()
-            # ── 카테고리 순서 고정: 미화용품 → 식음료류 → 기타 → 근무복 ──
             priority = ["미화용품", "식음료류", "기타", "근무복"]
             cat_list = [c for c in priority if c in all_cats] + \
                        sorted([c for c in all_cats if c not in priority])
@@ -1246,17 +1245,15 @@ with col_main:
             items_in_cat = sorted(
                 info_df[info_df["대분류"] == sel_cat]["품목"].dropna().astype(str).unique().tolist()
             )
-            # ── 핸드티슈를 맨 위로 ──
             if "핸드티슈" in items_in_cat:
                 items_in_cat.remove("핸드티슈")
                 items_in_cat.insert(0, "핸드티슈")
-                
-            with st.form("request_form", clear_on_submit=True):
-                sel_item  = st.selectbox("품목 선택", items_in_cat, key="req_item")
+
+            with st.form("request_form_v2", clear_on_submit=True):
+                sel_item  = st.selectbox("품목 선택", items_in_cat, key="req_item_v2")
                 item_info = info_df[(info_df["대분류"] == sel_cat) & (info_df["품목"] == sel_item)]
                 unit_val  = item_info["수량단위"].values[0] if not item_info.empty and "수량단위" in item_info.columns else ""
 
-                # ── 품목별 기본 발주수량 자동 반영 ──
                 def_qty = (
                     int(pd.to_numeric(item_info["기본발주수량"].values[0], errors="coerce"))
                     if not item_info.empty and "기본발주수량" in item_info.columns
@@ -1265,29 +1262,13 @@ with col_main:
 
                 req_qty  = st.number_input(
                     f"요청 수량 ({unit_val})",
-                    min_value=1, value=def_qty, step=1
+                    min_value=1, value=def_qty, step=1, key="req_qty_v2"
                 )
-                req_note = st.text_input("전달 사항 (선택)", placeholder="예: 빨리 필요해요")
+                req_note = st.text_input("전달 사항 (선택)", placeholder="예: 빨리 필요해요", key="req_note_v2")
 
-                if st.form_submit_button("🚀 발주 요청하기", use_container_width=True):
-                    if is_duplicate_request(sel_cat, sel_item, minutes=30):
-                        st.warning(
-                            f"⚠️ **{sel_item}** 은(는) 최근 30분 내 이미 요청되었습니다.\n\n"
-                            "처리 완료 후 다시 요청해주세요."
-                        )
-                    else:
-                        sb_insert("order_requests", {
-                            "요청일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                            "대분류": sel_cat, "품목": sel_item,
-                            "요청수량": req_qty, "비고": req_note, "상태": "대기"
-                        })
-                        st.success(
-                            f"✅ [{sel_cat}] **{sel_item}** {req_qty} {unit_val} "
-                            "요청이 접수되었습니다!\n\n관리자에게 알림이 전송됩니다."
-                        )
-                        st.toast("📦 발주 요청 접수 완료", icon="✅")
+                submit_clicked = st.form_submit_button("🚀 발주 요청하기", use_container_width=True)
 
-                if st.form_submit_button("🚀 발주 요청하기", use_container_width=True):
+                if submit_clicked:
                     if is_duplicate_request(sel_cat, sel_item, minutes=30):
                         st.warning(
                             f"⚠️ **{sel_item}** 은(는) 최근 30분 내 이미 요청되었습니다.\n\n"
