@@ -1,4 +1,5 @@
 import os
+import time
 import pandas as pd
 import streamlit as st
 from datetime import datetime, date, timedelta
@@ -96,24 +97,18 @@ def prep_num(df: pd.DataFrame, cols: list) -> pd.DataFrame:
 def cleanup_old_requests():
     """당일 이전의 발주 요청을 DB에서 영구 삭제 — 하루 1회만 실행."""
     today_str = datetime.now().strftime("%Y-%m-%d")
-
-    # 오늘 이미 청소했으면 건너뛰기
     if st.session_state.get("last_cleanup_date") == today_str:
         return
-
     try:
-        # 요청일시가 오늘 날짜로 시작하지 않는 모든 행 삭제
         sb.table("order_requests").delete().lt("요청일시", today_str).execute()
         st.session_state.last_cleanup_date = today_str
     except Exception:
-        # 청소 실패해도 앱은 정상 동작해야 함
         pass
 
-# 앱 시작 시 1회 실행
 cleanup_old_requests()
 
 # ─────────────────────────────────────────────
-# 5. 중복 발주 방지
+# 5-2. 중복 발주 방지
 # ─────────────────────────────────────────────
 def is_duplicate_request(cat: str, item: str, minutes: int = 30) -> bool:
     try:
@@ -449,7 +444,6 @@ with col_main:
             if pending_df.empty:
                 st.success("처리 대기 중인 발주 요청이 없습니다.")
             else:
-                # 헤더
                 h1, h2, h3, h4, h5 = st.columns([1.6, 1.2, 3.0, 0.6, 0.6])
                 h1.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>요청일시</small>", unsafe_allow_html=True)
                 h2.markdown("<small style='color:#b8ad9e;letter-spacing:.08em;'>분류</small>", unsafe_allow_html=True)
@@ -608,7 +602,7 @@ with col_main:
                     sb_update("inventory", row_id, fields)
                     st.success(f"✅ {adj_item} 재고가 {new_qty}개로 수정되었습니다.")
                     st.rerun()
-  
+
     # ══════════════════════════════════════════
     # 📥📤 INBOUND / OUTBOUND
     # ══════════════════════════════════════════
@@ -620,7 +614,6 @@ with col_main:
 
         if not info_df.empty:
             all_cats = info_df["대분류"].dropna().astype(str).unique().tolist()
-            # ── 카테고리 순서 고정: 미화용품 → 식음료류 → 기타 → 춘추복 ──
             priority = ["미화용품", "식음료류", "기타", "춘추복"]
             sorted_cats = [c for c in priority if c in all_cats] + \
                           sorted([c for c in all_cats if c not in priority])
@@ -629,7 +622,6 @@ with col_main:
         else:
             sel_cat, rel_items = st.text_input("대분류 직접 입력"), []
 
-        # ── 기본 입력 ──
         c1, c2 = st.columns(2)
         with c1:
             io_date = st.date_input("날짜", date.today())
@@ -638,7 +630,6 @@ with col_main:
             io_qty  = st.number_input("수량", min_value=1, step=1, value=1)
             io_note = st.text_input("비고")
 
-        # ── 입고 모드: 단가 입력 + 자동 합계 ──
         if mode == "입고":
             uc1, uc2 = st.columns([1, 1])
             with uc1:
@@ -674,7 +665,6 @@ with col_main:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ── 확정 버튼 ──
         if st.button(f"{icon} {mode} 확정", use_container_width=True, key="io_submit"):
             if not rel_items or io_item == "품목 없음":
                 st.error("품목을 선택해주세요.")
@@ -709,7 +699,6 @@ with col_main:
                             "출고수량": int(io_qty), "비고": io_note
                         })
 
-                    # ── 성공 팝업 ──
                     if mode == "입고":
                         popup_msg   = f"{io_item} {io_qty}개 입고 완료"
                         popup_sub   = f"구매금액 {int(io_amount):,}원"
@@ -788,7 +777,6 @@ with col_main:
                     </div>
                     """, unsafe_allow_html=True)
 
-                    import time
                     time.sleep(1.8)
                     st.rerun()
 
@@ -804,7 +792,6 @@ with col_main:
         if df_in_stat.empty:
             st.info("입고 내역이 없습니다. 입고 관리에서 데이터를 먼저 등록하세요.")
         else:
-            # ── 전처리 ──
             df_in_stat["입고수량"] = pd.to_numeric(df_in_stat["입고수량"], errors="coerce").fillna(0)
             df_in_stat["구매금액"] = pd.to_numeric(df_in_stat["구매금액"], errors="coerce").fillna(0)
             df_in_stat["입고일자"] = pd.to_datetime(df_in_stat["입고일자"], errors="coerce")
@@ -818,7 +805,6 @@ with col_main:
             prv_spent = df_in_stat[df_in_stat["년월"] == prv_m_str]["구매금액"].sum()
             diff      = cur_spent - prv_spent
 
-            # ── 섹션 1: KPI + 당월 도넛 ──
             kpi_col, donut_col = st.columns([1, 1.4], gap="large")
             with kpi_col:
                 st.metric("당월 집행 금액", f"{int(cur_spent):,} 원")
@@ -850,32 +836,23 @@ with col_main:
 
             st.divider()
 
-            # ── 섹션 2: 대분류별 분석 탭 ──
             st.markdown('<p class="section-heading">대분류별 상세 분석</p>', unsafe_allow_html=True)
 
             all_cats_r  = sorted(df_in_stat["대분류"].dropna().unique().tolist())
-            all_months  = sorted(df_in_stat["년월"].unique().tolist())  # 오름차순
+            all_months  = sorted(df_in_stat["년월"].unique().tolist())
 
-            # 기준 기간 설정 — 시작월 ~ 종료월 슬라이더
             if len(all_months) >= 2:
                 pr1, pr2 = st.columns(2)
                 with pr1:
-                    start_m = st.selectbox(
-                        "분석 시작 월", all_months,
-                        index=0, key="analysis_start"
-                    )
+                    start_m = st.selectbox("분석 시작 월", all_months, index=0, key="analysis_start")
                 with pr2:
-                    # 종료월 후보 = 시작월 이후만
                     end_candidates = [m for m in all_months if m >= start_m]
-                    end_m = st.selectbox(
-                        "분석 종료 월", end_candidates,
-                        index=len(end_candidates) - 1, key="analysis_end"
-                    )
+                    end_m = st.selectbox("분석 종료 월", end_candidates,
+                        index=len(end_candidates) - 1, key="analysis_end")
             else:
                 start_m = all_months[0] if all_months else cur_m_str
                 end_m   = start_m
 
-            # 기간 필터 적용
             df_period = df_in_stat[
                 (df_in_stat["년월"] >= start_m) & (df_in_stat["년월"] <= end_m)
             ].copy()
@@ -888,7 +865,6 @@ with col_main:
             cat_tabs = st.tabs(["📋 전체"] + [f"  {c}  " for c in all_cats_r])
 
             def render_cat_analysis(data: pd.DataFrame, label: str, n_months: int):
-                """대분류 하나에 대한 분석 블록 — 그래프 없이 테이블만"""
                 if data.empty:
                     st.info(f"{label} 데이터가 없습니다.")
                     return
@@ -923,7 +899,6 @@ with col_main:
 
             st.divider()
 
-            # ── 섹션 3: 상세 입고 기록 + 필터 + CSV ──
             st.markdown('<p class="section-heading">상세 입고 기록</p>', unsafe_allow_html=True)
 
             ff1, ff2, ff3 = st.columns([1.2, 1.2, 1])
@@ -1024,20 +999,17 @@ with col_main:
                         st.balloons()
                         st.rerun()
 
-        # ── 품목 수정 탭 ──
         with tab_edit:
             st.markdown('<p class="section-heading">등록된 품목 정보 수정</p>', unsafe_allow_html=True)
 
             if info_df.empty:
                 st.info("등록된 품목이 없습니다.")
             else:
-                # 대분류 → 품목 선택
                 edit_cats  = sorted(info_df["대분류"].dropna().unique().tolist())
                 edit_cat   = st.selectbox("대분류 선택", edit_cats, key="edit_cat")
                 edit_items = sorted(info_df[info_df["대분류"] == edit_cat]["품목"].dropna().unique().tolist())
                 edit_item  = st.selectbox("수정할 품목 선택", edit_items, key="edit_item")
 
-                # 선택 품목의 현재 값 조회
                 cur_info = info_df[
                     (info_df["대분류"] == edit_cat) & (info_df["품목"] == edit_item)
                 ]
@@ -1055,32 +1027,20 @@ with col_main:
                     with st.form("edit_item_form", clear_on_submit=False):
                         c1, c2 = st.columns(2)
                         with c1:
-                            new_vendor = st.text_input(
-                                "구매처",
-                                value=str(ci.get("구매처", "") or ""),
-                            )
-                            new_unit = st.text_input(
-                                "수량 단위",
-                                value=str(ci.get("수량단위", "EA") or "EA"),
-                            )
-                            new_note = st.text_area(
-                                "비고",
-                                value=str(ci.get("비고", "") or ""),
-                            )
+                            new_vendor = st.text_input("구매처", value=str(ci.get("구매처", "") or ""))
+                            new_unit = st.text_input("수량 단위", value=str(ci.get("수량단위", "EA") or "EA"))
+                            new_note = st.text_area("비고", value=str(ci.get("비고", "") or ""))
                         with c2:
                             new_safety = st.number_input(
-                                "안전재고",
-                                min_value=0,
+                                "안전재고", min_value=0,
                                 value=int(pd.to_numeric(ci.get("안전재고", 0), errors="coerce") or 0),
                             )
                             new_order_qty = st.number_input(
-                                "기본 발주수량",
-                                min_value=1,
+                                "기본 발주수량", min_value=1,
                                 value=int(pd.to_numeric(ci.get("기본발주수량", 1), errors="coerce") or 1),
                             )
 
                         if st.form_submit_button("💾 수정 저장", use_container_width=True):
-                            # inventory_info 업데이트
                             sb_update("inventory_info", info_id, {
                                 "구매처":     new_vendor,
                                 "수량단위":   new_unit,
@@ -1088,7 +1048,6 @@ with col_main:
                                 "기본발주수량": new_order_qty,
                                 "비고":       new_note,
                             })
-                            # inventory 테이블도 단위·안전재고 동기화
                             if inv_id:
                                 sb_update("inventory", inv_id, {
                                     "수량단위": new_unit,
@@ -1150,7 +1109,6 @@ with col_main:
                 df_in_del["입고수량"] = pd.to_numeric(df_in_del["입고수량"], errors="coerce").fillna(0).astype(int)
                 df_in_del["구매금액"] = pd.to_numeric(df_in_del["구매금액"], errors="coerce").fillna(0).astype(int)
 
-                # ── 필터 ──
                 fd1, fd2, fd3 = st.columns(3)
                 with fd1:
                     del_month_list = ["전체"] + sorted(df_in_del["년월"].unique().tolist(), reverse=True)
@@ -1159,14 +1117,12 @@ with col_main:
                     del_cat_list = ["전체"] + sorted(df_in_del["대분류"].dropna().unique().tolist())
                     del_sel_cat  = st.selectbox("대분류 선택", del_cat_list, key="del_in_cat")
                 with fd3:
-                    # 대분류 필터 적용 후 품목 목록 동적 생성
                     _tmp = df_in_del.copy()
                     if del_sel_cat != "전체":
                         _tmp = _tmp[_tmp["대분류"] == del_sel_cat]
                     del_item_list = ["전체"] + sorted(_tmp["품목"].dropna().unique().tolist())
                     del_sel_item  = st.selectbox("품목 선택", del_item_list, key="del_in_item")
 
-                # 필터 적용
                 df_filtered = df_in_del.copy()
                 if del_sel_month != "전체":
                     df_filtered = df_filtered[df_filtered["년월"] == del_sel_month]
@@ -1175,7 +1131,6 @@ with col_main:
                 if del_sel_item != "전체":
                     df_filtered = df_filtered[df_filtered["품목"] == del_sel_item]
 
-                # 필터된 결과 미리보기
                 if df_filtered.empty:
                     st.info("선택한 조건에 해당하는 입고 기록이 없습니다.")
                 else:
