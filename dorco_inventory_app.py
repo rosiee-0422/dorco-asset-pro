@@ -899,10 +899,16 @@ with col_main:
 
                 csv_out = disp_df[["입고일자","대분류","품목","입고수량","구매금액"]].copy()
                 csv_out["입고일자"] = pd.to_datetime(csv_out["입고일자"], errors="coerce").dt.strftime("%Y-%m-%d")
+
+                # UTF-8 BOM을 명시적으로 앞에 붙여서 Excel 한글 깨짐 방지
+                csv_bytes = "\ufeff" + csv_out.sort_values("입고일자", ascending=False).to_csv(index=False)
+
                 st.download_button(
                     "📥 CSV 다운로드",
-                    data=csv_out.sort_values("입고일자", ascending=False).to_csv(index=False, encoding="utf-8-sig"),
-                    file_name=fname, mime="text/csv", use_container_width=True
+                    data=csv_bytes.encode("utf-8"),
+                    file_name=fname,
+                    mime="text/csv",
+                    use_container_width=True
                 )
 
             disp_df2 = disp_df.copy()
