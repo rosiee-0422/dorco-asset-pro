@@ -865,7 +865,7 @@ with col_main:
                         "누적 금액(원)":   st.column_config.NumberColumn(format="%d 원"),
                     }
                 )
-
+                
             with cat_tabs[0]:
                 render_cat_analysis(df_period, "전체", n_months_period)
 
