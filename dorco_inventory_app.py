@@ -642,21 +642,7 @@ with col_main:
                 st.markdown(f"""
                 <div style="
                     background: #fff9ef;
-                    border: 1px solid #e8e0d0;
-                    border-radius: 10px;
-                    padding: 10px 18px;
-                    margin-top: 28px;
-                    height: 44px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                ">
-                    <span style="font-size: 11px; color: #b8ad9e; letter-spacing: 0.1em; text-transform: uppercase;">
-                        합계 금액
-                    </span>
-                    <span style="font-family: 'DM Mono', monospace; font-size: 18px; color: #c07c3a; font-weight: 600;">
-                        {io_amount:,} 원
-                    </span>
+                    ...
                 </div>
                 """, unsafe_allow_html=True)
             st.caption(f"📐 {int(io_qty):,}개 × {int(io_unit_price):,}원 = **{io_amount:,}원**")
