@@ -46,7 +46,7 @@ if "admin_toast_shown" not in st.session_state:
 
 # ─────────────────────────────────────────────
 # 3-1. 지급형 대분류 설정
-#  · 여기 적힌 대분류는 "지급품 전용 탭(UNIFORM)"에서만 관리됩니다.
+#  · 여기 적힌 대분류는 "지급품 전용 탭(ONBOARDING)"에서만 관리됩니다.
 #  · 발주요청 / 입고관리 / 재고현황 / 리포트에서는 자동으로 숨겨집니다.
 #  · 새 지급품(예: 안전화, 작업조끼)이 생기면 아래 목록에 이름만 추가하세요.
 # ─────────────────────────────────────────────
@@ -416,8 +416,8 @@ if st.session_state.sidebar_open:
             st.session_state.selected_submenu = "출고"; st.rerun()
 
         st.markdown("<hr style='border:none;border-top:1px solid #e8e0d0;margin:8px 4px 6px;'>", unsafe_allow_html=True)
-        if st.button("  👔  UNIFORM"):
-            st.session_state.selected_menu = "UNIFORM"; st.rerun()
+        if st.button("  👔  ONBOARDING"):
+            st.session_state.selected_menu = "ONBOARDING"; st.rerun()
 
         st.markdown('<p class="menu-section">System</p>', unsafe_allow_html=True)
         if st.button("  ⚙️  Admin Settings"):
@@ -810,9 +810,9 @@ with col_main:
                     st.rerun()
 
     # ══════════════════════════════════════════
-    # 👔 UNIFORM — 지급품 전용 관리
+    # 👔 ONBOARDING — 지급품 전용 관리
     # ══════════════════════════════════════════
-    elif current == "UNIFORM":
+    elif current == "ONBOARDING":
         st.markdown('<p class="page-title">지급품 관리</p>', unsafe_allow_html=True)
         st.markdown('<p class="page-sub">근무복(춘추복)·근무복(동복)·웰컴키트·노트북받침대 등 일괄 발주 후 지급·재고만 관리</p>', unsafe_allow_html=True)
 
@@ -827,7 +827,7 @@ with col_main:
                 f"**{', '.join(ISSUE_CATEGORIES)}** 중 하나로 등록하면 여기서 관리됩니다."
             )
         else:
-            sel_cat = st.selectbox("대분류 선택", uni_cats_present, index=0, key="uniform_cat")
+            sel_cat = st.selectbox("대분류 선택", uni_cats_present, index=0, key="ONBOARDING_cat")
 
             # ── 현재 재고 현황 ──
             st.markdown('<p class="section-heading">📦 현재 재고 현황</p>', unsafe_allow_html=True)
@@ -842,7 +842,7 @@ with col_main:
 
             # ── 재고 조정 (초기 대량 발주 입력 / 수량 보정) ──
             with st.expander("⚙️ 재고 조정 — 초기 대량 입고 · 수량 보정", expanded=False):
-                with st.form("uniform_stock_form", clear_on_submit=True):
+                with st.form("ONBOARDING_stock_form", clear_on_submit=True):
                     sa1, sa2 = st.columns([1.5, 1])
                     with sa1:
                         adj_item_u = st.selectbox("품목", uni_items if uni_items else ["품목 없음"], key="uni_adj_item")
@@ -863,7 +863,7 @@ with col_main:
 
             # ── 지급 처리 ──
             with st.expander("✍️ 지급 처리 — 직원에게 지급(출고)", expanded=False):
-                with st.form("uniform_issue_form", clear_on_submit=True):
+                with st.form("ONBOARDING_issue_form", clear_on_submit=True):
                     ic1, ic2 = st.columns([1.5, 1])
                     with ic1:
                         issue_item = st.selectbox("품목", uni_items if uni_items else ["품목 없음"], key="uni_issue_item")
