@@ -45,6 +45,14 @@ if "admin_toast_shown" not in st.session_state:
     st.session_state.admin_toast_shown = False
 
 # ─────────────────────────────────────────────
+# 3-1. 지급형 대분류 설정
+#  · 여기 적힌 대분류는 "지급품 전용 탭(UNIFORM)"에서만 관리됩니다.
+#  · 발주요청 / 입고관리 / 재고현황 / 리포트에서는 자동으로 숨겨집니다.
+#  · 새 지급품(예: 안전화, 작업조끼)이 생기면 아래 목록에 이름만 추가하세요.
+# ─────────────────────────────────────────────
+ISSUE_CATEGORIES = ["근무복", "춘추복", "웰컴키트", "노트북받침대"]
+
+# ─────────────────────────────────────────────
 # 4. Supabase CRUD 헬퍼
 # ─────────────────────────────────────────────
 
@@ -406,7 +414,9 @@ if st.session_state.sidebar_open:
         if st.button("  📤  Outbound"):
             st.session_state.selected_menu = "INOUT"
             st.session_state.selected_submenu = "출고"; st.rerun()
-        if st.button("  👔  근무복/재고 관리"):
+
+        st.markdown("<hr style='border:none;border-top:1px solid #e8e0d0;margin:8px 4px 6px;'>", unsafe_allow_html=True)
+        if st.button("  👔  UNIFORM"):
             st.session_state.selected_menu = "UNIFORM"; st.rerun()
 
         st.markdown('<p class="menu-section">System</p>', unsafe_allow_html=True)
@@ -425,6 +435,19 @@ with col_main:
     info_df = sb_select("inventory_info")
     req_log = sb_select("order_requests")
     current = st.session_state.selected_menu
+
+    # ── 소모품 / 지급품 분리 ──
+    # info_consum, df_consum → 일반 소모품 (발주요청·입고·재고·리포트에서 사용)
+    # info_df (전체)         → Admin 관리에서 사용 (지급품 등록/수정 위해)
+    if not info_df.empty and "대분류" in info_df.columns:
+        info_consum = info_df[~info_df["대분류"].isin(ISSUE_CATEGORIES)].copy()
+    else:
+        info_consum = info_df.copy()
+
+    if not df.empty and "대분류" in df.columns:
+        df_consum = df[~df["대분류"].isin(ISSUE_CATEGORIES)].copy()
+    else:
+        df_consum = df.copy()
 
     # ══════════════════════════════════════════
     # 🏠 HOME DASHBOARD
@@ -477,6 +500,8 @@ with col_main:
                     st.caption(f"… 외 {len(pending_df) - 10}건 더 있음")
 
         df_in = sb_select("inventory_in")
+        if not df_in.empty and "대분류" in df_in.columns:
+            df_in = df_in[~df_in["대분류"].isin(ISSUE_CATEGORIES)]
         today = datetime.now()
 
         if not df_in.empty:
@@ -490,7 +515,7 @@ with col_main:
 
         annual_spent  = int(year_df["구매금액"].sum())  if not year_df.empty  else 0
         monthly_spent = int(month_df["구매금액"].sum()) if not month_df.empty else 0
-        low_stock_cnt = int((df["현재고"] < df["안전재고"]).sum()) if not df.empty and "현재고" in df.columns else 0
+        low_stock_cnt = int((df_consum["현재고"] < df_consum["안전재고"]).sum()) if not df_consum.empty and "현재고" in df_consum.columns else 0
 
         k1, k2, k3 = st.columns(3)
         k1.metric("이번 달 사용 금액",   f"{monthly_spent:,} 원")
@@ -532,10 +557,10 @@ with col_main:
             else:
                 st.info("데이터 없음")
 
-        if not df.empty and low_stock_cnt > 0:
+        if not df_consum.empty and low_stock_cnt > 0:
             st.divider()
             st.markdown('<p class="section-heading">⚠️ 안전재고 미달 품목</p>', unsafe_allow_html=True)
-            low_df = df[df["현재고"] < df["안전재고"]][["대분류","품목","현재고","안전재고"]].copy()
+            low_df = df_consum[df_consum["현재고"] < df_consum["안전재고"]][["대분류","품목","현재고","안전재고"]].copy()
             low_df["부족수량"] = low_df["안전재고"] - low_df["현재고"]
             st.dataframe(low_df, use_container_width=True, hide_index=True)
 
@@ -547,6 +572,8 @@ with col_main:
         st.markdown('<p class="page-sub">현재고 실시간 조회 및 수정</p>', unsafe_allow_html=True)
 
         stock_df = prep_num(sb_select("inventory"), ["현재고", "안전재고"])
+        if not stock_df.empty and "대분류" in stock_df.columns:
+            stock_df = stock_df[~stock_df["대분류"].isin(ISSUE_CATEGORIES)]
 
         sf1, sf2 = st.columns([1, 2])
         with sf1:
@@ -571,10 +598,10 @@ with col_main:
         st.markdown('<p class="section-heading">실시간 재고 수정</p>', unsafe_allow_html=True)
         st.caption("실사 후 수량이 다를 경우 즉시 수정하세요.")
 
-        if not info_df.empty:
-            all_cats  = sorted(info_df["대분류"].dropna().astype(str).unique().tolist())
+        if not info_consum.empty:
+            all_cats  = sorted(info_consum["대분류"].dropna().astype(str).unique().tolist())
             adj_cat   = st.selectbox("대분류 선택", all_cats, key="adj_cat")
-            adj_items = sorted(info_df[info_df["대분류"] == adj_cat]["품목"].dropna().astype(str).unique().tolist())
+            adj_items = sorted(info_consum[info_consum["대분류"] == adj_cat]["품목"].dropna().astype(str).unique().tolist())
         else:
             adj_cat, adj_items = None, []
 
@@ -614,13 +641,13 @@ with col_main:
         st.markdown(f'<p class="page-title">{icon} {mode} 관리</p>', unsafe_allow_html=True)
         st.markdown(f'<p class="page-sub">{mode} 처리 및 재고 자동 반영</p>', unsafe_allow_html=True)
 
-        if not info_df.empty:
-            all_cats = info_df["대분류"].dropna().astype(str).unique().tolist()
+        if not info_consum.empty:
+            all_cats = info_consum["대분류"].dropna().astype(str).unique().tolist()
             priority = ["미화용품", "식음료류", "기타", "춘추복"]
             sorted_cats = [c for c in priority if c in all_cats] + \
                           sorted([c for c in all_cats if c not in priority])
             sel_cat   = st.selectbox("대분류 선택", sorted_cats, key="io_cat")
-            rel_items = sorted(info_df[info_df["대분류"] == sel_cat]["품목"].dropna().tolist())
+            rel_items = sorted(info_consum[info_consum["대분류"] == sel_cat]["품목"].dropna().tolist())
         else:
             sel_cat, rel_items = st.text_input("대분류 직접 입력"), []
 
@@ -633,11 +660,35 @@ with col_main:
             io_note = st.text_input("비고")
 
         if mode == "입고":
-            io_amount = st.number_input(
-                "구매금액 (원)",
-                min_value=0, step=100, value=0,
-                help="입고 처리 시에만 입력합니다."
-            )
+            uc1, uc2 = st.columns([1, 1])
+            with uc1:
+                io_unit_price = st.number_input(
+                    "단가 (원)", min_value=0, step=100, value=0,
+                    help="단가를 입력하면 합계가 자동 계산됩니다."
+                )
+            io_amount = int(io_qty) * int(io_unit_price)
+            with uc2:
+                st.markdown(f"""
+                <div style="
+                    background: #fff9ef;
+                    border: 1px solid #e8e0d0;
+                    border-radius: 10px;
+                    padding: 10px 18px;
+                    margin-top: 28px;
+                    height: 44px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                ">
+                    <span style="font-size: 11px; color: #b8ad9e; letter-spacing: 0.1em; text-transform: uppercase;">
+                        합계 금액
+                    </span>
+                    <span style="font-family: 'DM Mono', monospace; font-size: 18px; color: #c07c3a; font-weight: 600;">
+                        {io_amount:,} 원
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+            st.caption(f"📐 {int(io_qty):,}개 × {int(io_unit_price):,}원 = **{io_amount:,}원**")
         else:
             io_amount = 0
 
@@ -759,70 +810,94 @@ with col_main:
                     st.rerun()
 
     # ══════════════════════════════════════════
-    # 👔 UNIFORM / 재고 전용 관리
+    # 👔 UNIFORM — 지급품 전용 관리
     # ══════════════════════════════════════════
     elif current == "UNIFORM":
-        st.markdown('<p class="page-title">근무복 / 재고 전용 관리</p>', unsafe_allow_html=True)
-        st.markdown('<p class="page-sub">대량 발주 후 재고·지급 이력만 관리하는 품목</p>', unsafe_allow_html=True)
+        st.markdown('<p class="page-title">지급품 관리</p>', unsafe_allow_html=True)
+        st.markdown('<p class="page-sub">근무복·웰컴키트·노트북받침대 등 일괄 발주 후 지급·재고만 관리</p>', unsafe_allow_html=True)
 
-        stock_df = prep_num(sb_select("inventory"), ["현재고", "안전재고"])
+        # 등록된 지급형 대분류만 추림
+        uni_stock = df[df["대분류"].isin(ISSUE_CATEGORIES)] if not df.empty and "대분류" in df.columns else pd.DataFrame()
+        uni_cats_present = sorted(uni_stock["대분류"].dropna().astype(str).unique().tolist()) if not uni_stock.empty else []
 
-        if info_df.empty:
-            st.warning("등록된 품목이 없습니다.")
+        if not uni_cats_present:
+            st.info(
+                "아직 등록된 지급품이 없습니다.\n\n"
+                "Admin Settings → 신규 품목 등록에서 대분류를 "
+                f"**{', '.join(ISSUE_CATEGORIES)}** 중 하나로 등록하면 여기서 관리됩니다."
+            )
         else:
-            all_cats = info_df["대분류"].dropna().astype(str).unique().tolist()
-            # 근무복/춘추복을 우선 노출
-            priority = [c for c in ["근무복", "춘추복"] if c in all_cats]
-            uni_cats = priority + sorted([c for c in all_cats if c not in priority])
-            sel_cat = st.selectbox("대분류 선택", uni_cats, index=0, key="uniform_cat")
+            sel_cat = st.selectbox("대분류 선택", uni_cats_present, index=0, key="uniform_cat")
 
             # ── 현재 재고 현황 ──
             st.markdown('<p class="section-heading">📦 현재 재고 현황</p>', unsafe_allow_html=True)
-            cat_stock = stock_df[stock_df["대분류"] == sel_cat] if not stock_df.empty else pd.DataFrame()
+            cat_stock = uni_stock[uni_stock["대분류"] == sel_cat].copy()
             if cat_stock.empty:
                 st.info("해당 분류에 재고 데이터가 없습니다.")
             else:
-                show_cols = [c for c in ["품목","수량단위","현재고","안전재고","최근출고일"] if c in cat_stock.columns]
+                show_cols = [c for c in ["품목","수량단위","현재고","안전재고","최근입고일","최근출고일"] if c in cat_stock.columns]
                 st.dataframe(cat_stock[show_cols], use_container_width=True, hide_index=True)
 
-            st.divider()
+            uni_items = sorted(cat_stock["품목"].dropna().astype(str).unique().tolist())
 
-            # ── 지급(출고) 입력 ── ※ 필요 없으면 이 폼 블록만 삭제
-            st.markdown('<p class="section-heading">✍️ 지급 처리</p>', unsafe_allow_html=True)
-            uni_items = sorted(info_df[info_df["대분류"] == sel_cat]["품목"].dropna().astype(str).unique().tolist())
-            with st.form("uniform_issue_form", clear_on_submit=True):
-                uc1, uc2, uc3 = st.columns([1.3, 1, 1.5])
-                with uc1:
-                    issue_item = st.selectbox("품목", uni_items if uni_items else ["품목 없음"])
-                with uc2:
-                    issue_qty = st.number_input("지급 수량", min_value=1, step=1, value=1)
-                with uc3:
-                    issue_to = st.text_input("받는 사람 / 비고", placeholder="예: 김미화 여사님")
-                issue_date = st.date_input("지급 일자", date.today())
-                if st.form_submit_button("👔 지급 확정", use_container_width=True):
-                    if not uni_items or issue_item == "품목 없음":
-                        st.error("품목을 선택해주세요.")
-                    else:
-                        inv_row = stock_df[(stock_df["대분류"] == sel_cat) & (stock_df["품목"] == issue_item)]
-                        if inv_row.empty:
-                            st.error("재고 마스터에 해당 품목이 없습니다.")
+            # ── 재고 조정 (초기 대량 발주 입력 / 수량 보정) ──
+            with st.expander("⚙️ 재고 조정 — 초기 대량 입고 · 수량 보정", expanded=False):
+                with st.form("uniform_stock_form", clear_on_submit=True):
+                    sa1, sa2 = st.columns([1.5, 1])
+                    with sa1:
+                        adj_item_u = st.selectbox("품목", uni_items if uni_items else ["품목 없음"], key="uni_adj_item")
+                    cur_row_u = cat_stock[cat_stock["품목"] == adj_item_u] if uni_items else pd.DataFrame()
+                    cur_val_u = int(cur_row_u["현재고"].values[0]) if not cur_row_u.empty else 0
+                    with sa2:
+                        new_val_u = st.number_input(f"현재고 (기존 {cur_val_u})", min_value=0, step=1, value=cur_val_u, key="uni_adj_qty")
+                    if st.form_submit_button("💾 재고 저장", use_container_width=True):
+                        if not uni_items or adj_item_u == "품목 없음":
+                            st.error("품목을 선택해주세요.")
+                        elif not cur_row_u.empty:
+                            sb_update("inventory", int(cur_row_u["id"].values[0]), {
+                                "현재고": int(new_val_u),
+                                "최근입고일": date.today().strftime("%Y-%m-%d")
+                            })
+                            st.success(f"✅ {adj_item_u} 재고가 {new_val_u}개로 저장되었습니다.")
+                            st.rerun()
+
+            # ── 지급 처리 ──
+            with st.expander("✍️ 지급 처리 — 직원에게 지급(출고)", expanded=False):
+                with st.form("uniform_issue_form", clear_on_submit=True):
+                    ic1, ic2 = st.columns([1.5, 1])
+                    with ic1:
+                        issue_item = st.selectbox("품목", uni_items if uni_items else ["품목 없음"], key="uni_issue_item")
+                    with ic2:
+                        issue_qty = st.number_input("지급 수량", min_value=1, step=1, value=1, key="uni_issue_qty")
+                    ic3, ic4 = st.columns([1.5, 1])
+                    with ic3:
+                        issue_to = st.text_input("받는 사람 / 비고", placeholder="예: 김미화 여사님", key="uni_issue_to")
+                    with ic4:
+                        issue_date = st.date_input("지급 일자", date.today(), key="uni_issue_date")
+                    if st.form_submit_button("👔 지급 확정", use_container_width=True):
+                        if not uni_items or issue_item == "품목 없음":
+                            st.error("품목을 선택해주세요.")
                         else:
-                            row_id = int(inv_row["id"].values[0])
-                            curr   = int(inv_row["현재고"].values[0])
-                            if curr < issue_qty:
-                                st.error(f"재고 부족 — 현재고: {curr}개")
+                            irow = cat_stock[cat_stock["품목"] == issue_item]
+                            if irow.empty:
+                                st.error("재고 마스터에 해당 품목이 없습니다.")
                             else:
-                                sb_update("inventory", row_id, {
-                                    "현재고": curr - issue_qty,
-                                    "최근출고일": issue_date.strftime("%Y-%m-%d")
-                                })
-                                sb_insert("inventory_out", {
-                                    "출고일자": issue_date.strftime("%Y-%m-%d"),
-                                    "대분류": sel_cat, "품목": issue_item,
-                                    "출고수량": int(issue_qty), "비고": issue_to
-                                })
-                                st.success(f"✅ {issue_item} {issue_qty}개 지급 완료")
-                                st.rerun()
+                                row_id_u = int(irow["id"].values[0])
+                                curr_u   = int(irow["현재고"].values[0])
+                                if curr_u < issue_qty:
+                                    st.error(f"재고 부족 — 현재고: {curr_u}개")
+                                else:
+                                    sb_update("inventory", row_id_u, {
+                                        "현재고": curr_u - issue_qty,
+                                        "최근출고일": issue_date.strftime("%Y-%m-%d")
+                                    })
+                                    sb_insert("inventory_out", {
+                                        "출고일자": issue_date.strftime("%Y-%m-%d"),
+                                        "대분류": sel_cat, "품목": issue_item,
+                                        "출고수량": int(issue_qty), "비고": issue_to
+                                    })
+                                    st.success(f"✅ {issue_item} {issue_qty}개 지급 완료")
+                                    st.rerun()
 
             st.divider()
 
@@ -852,7 +927,7 @@ with col_main:
                         file_name=f"지급이력_{sel_cat}_{date.today()}.csv",
                         mime="text/csv", use_container_width=True
                     )
-                    
+
     # ══════════════════════════════════════════
     # 📊 INSIGHT REPORT
     # ══════════════════════════════════════════
@@ -861,6 +936,8 @@ with col_main:
         st.markdown('<p class="page-sub">입고 내역 기반 비용 분석</p>', unsafe_allow_html=True)
 
         df_in_stat = sb_select("inventory_in")
+        if not df_in_stat.empty and "대분류" in df_in_stat.columns:
+            df_in_stat = df_in_stat[~df_in_stat["대분류"].isin(ISSUE_CATEGORIES)]
 
         if df_in_stat.empty:
             st.info("입고 내역이 없습니다. 입고 관리에서 데이터를 먼저 등록하세요.")
@@ -963,18 +1040,6 @@ with col_main:
                     }
                 )
 
-                # ── 대분류별 분석 CSV 다운로드 ──
-                csv_label = label.strip() if label.strip() else "전체"
-                analysis_csv = "\ufeff" + show.to_csv(index=False)
-                st.download_button(
-                    f"📥 [{csv_label}] 분석 CSV 다운로드",
-                    data=analysis_csv.encode("utf-8"),
-                    file_name=f"분석_{csv_label}_{start_m}~{end_m}_{date.today()}.csv",
-                    mime="text/csv",
-                    key=f"dl_analysis_{csv_label}",
-                    use_container_width=True
-                )
-                
             with cat_tabs[0]:
                 render_cat_analysis(df_period, "전체", n_months_period)
 
@@ -1008,16 +1073,10 @@ with col_main:
 
                 csv_out = disp_df[["입고일자","대분류","품목","입고수량","구매금액"]].copy()
                 csv_out["입고일자"] = pd.to_datetime(csv_out["입고일자"], errors="coerce").dt.strftime("%Y-%m-%d")
-
-                # UTF-8 BOM을 명시적으로 앞에 붙여서 Excel 한글 깨짐 방지
-                csv_bytes = "\ufeff" + csv_out.sort_values("입고일자", ascending=False).to_csv(index=False)
-
                 st.download_button(
                     "📥 CSV 다운로드",
-                    data=csv_bytes.encode("utf-8"),
-                    file_name=fname,
-                    mime="text/csv",
-                    use_container_width=True
+                    data=csv_out.sort_values("입고일자", ascending=False).to_csv(index=False, encoding="utf-8-sig"),
+                    file_name=fname, mime="text/csv", use_container_width=True
                 )
 
             disp_df2 = disp_df.copy()
@@ -1278,18 +1337,18 @@ with col_main:
         </div>
         """, unsafe_allow_html=True)
 
-        if info_df.empty:
+        if info_consum.empty:
             st.warning("등록된 품목이 없습니다. 관리자에게 문의하세요.")
         else:
-            all_cats = info_df["대분류"].dropna().astype(str).unique().tolist()
-            priority = ["미화용품", "식음료류", "기타", "근무복"]
+            all_cats = info_consum["대분류"].dropna().astype(str).unique().tolist()
+            priority = ["미화용품", "식음료류", "기타"]
             cat_list = [c for c in priority if c in all_cats] + \
                        sorted([c for c in all_cats if c not in priority])
 
             sel_cat = st.selectbox("카테고리", cat_list, index=0, key="req_cat")
 
             items_in_cat = sorted(
-                info_df[info_df["대분류"] == sel_cat]["품목"].dropna().astype(str).unique().tolist()
+                info_consum[info_consum["대분류"] == sel_cat]["품목"].dropna().astype(str).unique().tolist()
             )
             if "핸드티슈" in items_in_cat:
                 items_in_cat.remove("핸드티슈")
