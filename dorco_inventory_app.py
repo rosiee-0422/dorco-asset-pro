@@ -876,7 +876,7 @@ with col_main:
                     mime="text/csv",
                     key=f"dl_analysis_{csv_label}",
                     use_container_width=True
-                ))
+                )
                 
             with cat_tabs[0]:
                 render_cat_analysis(df_period, "전체", n_months_period)
