@@ -865,6 +865,18 @@ with col_main:
                         "누적 금액(원)":   st.column_config.NumberColumn(format="%d 원"),
                     }
                 )
+
+                # ── 대분류별 분석 CSV 다운로드 ──
+                csv_label = label.strip() if label.strip() else "전체"
+                analysis_csv = "\ufeff" + show.to_csv(index=False)
+                st.download_button(
+                    f"📥 [{csv_label}] 분석 CSV 다운로드",
+                    data=analysis_csv.encode("utf-8"),
+                    file_name=f"분석_{csv_label}_{start_m}~{end_m}_{date.today()}.csv",
+                    mime="text/csv",
+                    key=f"dl_analysis_{csv_label}",
+                    use_container_width=True
+                ))
                 
             with cat_tabs[0]:
                 render_cat_analysis(df_period, "전체", n_months_period)
