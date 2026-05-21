@@ -50,7 +50,7 @@ if "admin_toast_shown" not in st.session_state:
 #  · 발주요청 / 입고관리 / 재고현황 / 리포트에서는 자동으로 숨겨집니다.
 #  · 새 지급품(예: 안전화, 작업조끼)이 생기면 아래 목록에 이름만 추가하세요.
 # ─────────────────────────────────────────────
-ISSUE_CATEGORIES = ["근무복", "춘추복", "웰컴키트", "노트북받침대"]
+ISSUE_CATEGORIES = ["근무복(춘추복)", "근무복(동복)", "웰컴키트", "노트북받침대"]
 
 # ─────────────────────────────────────────────
 # 4. Supabase CRUD 헬퍼
@@ -643,7 +643,7 @@ with col_main:
 
         if not info_consum.empty:
             all_cats = info_consum["대분류"].dropna().astype(str).unique().tolist()
-            priority = ["미화용품", "식음료류", "기타", "춘추복"]
+            priority = ["미화용품", "식음료류", "기타"]
             sorted_cats = [c for c in priority if c in all_cats] + \
                           sorted([c for c in all_cats if c not in priority])
             sel_cat   = st.selectbox("대분류 선택", sorted_cats, key="io_cat")
