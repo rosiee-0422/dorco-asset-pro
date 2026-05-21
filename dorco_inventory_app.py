@@ -814,7 +814,7 @@ with col_main:
     # ══════════════════════════════════════════
     elif current == "UNIFORM":
         st.markdown('<p class="page-title">지급품 관리</p>', unsafe_allow_html=True)
-        st.markdown('<p class="page-sub">근무복·웰컴키트·노트북받침대 등 일괄 발주 후 지급·재고만 관리</p>', unsafe_allow_html=True)
+        st.markdown('<p class="page-sub">근무복(춘추복)·근무복(동복)·웰컴키트·노트북받침대 등 일괄 발주 후 지급·재고만 관리</p>', unsafe_allow_html=True)
 
         # 등록된 지급형 대분류만 추림
         uni_stock = df[df["대분류"].isin(ISSUE_CATEGORIES)] if not df.empty and "대분류" in df.columns else pd.DataFrame()
