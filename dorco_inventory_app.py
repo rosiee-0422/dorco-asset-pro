@@ -1,3 +1,4 @@
+import requests
 import os
 import time
 import pandas as pd
@@ -66,7 +67,7 @@ def sb_select(table: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def sb_insert(table: str, row: dict):
+def (table: str, row: dict):
     """단일 행 삽입"""
     row = {k: v for k, v in row.items() if k != "id"}
     try:
@@ -685,7 +686,7 @@ with col_main:
                             "현재고": curr_stock + io_qty,
                             "최근입고일": io_date.strftime("%Y-%m-%d")
                         })
-                        sb_insert("inventory_in", {
+                        ("inventory_in", {
                             "입고일자": io_date.strftime("%Y-%m-%d"),
                             "대분류": sel_cat, "품목": io_item,
                             "입고수량": int(io_qty), "구매금액": int(io_amount)
@@ -698,7 +699,7 @@ with col_main:
                             "현재고": curr_stock - io_qty,
                             "최근출고일": io_date.strftime("%Y-%m-%d")
                         })
-                        sb_insert("inventory_out", {
+                        ("inventory_out", {
                             "출고일자": io_date.strftime("%Y-%m-%d"),
                             "대분류": sel_cat, "품목": io_item,
                             "출고수량": int(io_qty), "비고": io_note
@@ -867,7 +868,7 @@ with col_main:
                                         "현재고": curr_u - issue_qty,
                                         "최근출고일": issue_date.strftime("%Y-%m-%d")
                                     })
-                                    sb_insert("inventory_out", {
+                                    ("inventory_out", {
                                         "출고일자": issue_date.strftime("%Y-%m-%d"),
                                         "대분류": sel_cat, "품목": issue_item,
                                         "출고수량": int(issue_qty), "비고": issue_to
@@ -1111,12 +1112,12 @@ with col_main:
                     elif not df.empty and ((df["대분류"] == final_cat) & (df["품목"] == item_name)).any():
                         st.error(f"'{item_name}'은 이미 등록된 품목입니다.")
                     else:
-                        sb_insert("inventory_info", {
+                        ("inventory_info", {
                             "대분류": final_cat, "품목": item_name, "구매처": vendor,
                             "수량단위": unit, "안전재고": safety_stock,
                             "기본발주수량": default_order_qty, "비고": note
                         })
-                        sb_insert("inventory", {
+                        ("inventory", {
                             "대분류": final_cat, "품목": item_name, "수량단위": unit,
                             "현재고": 0, "안전재고": safety_stock,
                             "최근입고일": "", "최근출고일": ""
@@ -1356,7 +1357,7 @@ with col_main:
                             "처리 완료 후 다시 요청해주세요."
                         )
                     else:
-                        sb_insert("order_requests", {
+                        ("order_requests", {
                             "요청일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
                             "대분류": sel_cat, "품목": sel_item,
                             "요청수량": req_qty, "비고": req_note, "상태": "대기"
