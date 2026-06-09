@@ -27,6 +27,8 @@ def get_supabase() -> Client:
 
 sb = get_supabase()
 
+# Power Automate URL (secrets에 넣는 걸 권장)
+POWER_AUTOMATE_URL = st.secrets["POWER_AUTOMATE_URL"]
 # ─────────────────────────────────────────────
 # 3. 세션 상태 초기화
 # ─────────────────────────────────────────────
@@ -686,7 +688,7 @@ with col_main:
                             "현재고": curr_stock + io_qty,
                             "최근입고일": io_date.strftime("%Y-%m-%d")
                         })
-                        ("inventory_in", {
+                        sb_insert("inventory_in", {
                             "입고일자": io_date.strftime("%Y-%m-%d"),
                             "대분류": sel_cat, "품목": io_item,
                             "입고수량": int(io_qty), "구매금액": int(io_amount)
@@ -699,7 +701,7 @@ with col_main:
                             "현재고": curr_stock - io_qty,
                             "최근출고일": io_date.strftime("%Y-%m-%d")
                         })
-                        ("inventory_out", {
+                        sb_insert("inventory_out", {
                             "출고일자": io_date.strftime("%Y-%m-%d"),
                             "대분류": sel_cat, "품목": io_item,
                             "출고수량": int(io_qty), "비고": io_note
@@ -868,7 +870,7 @@ with col_main:
                                         "현재고": curr_u - issue_qty,
                                         "최근출고일": issue_date.strftime("%Y-%m-%d")
                                     })
-                                    ("inventory_out", {
+                                    sb_insert("inventory_out", {
                                         "출고일자": issue_date.strftime("%Y-%m-%d"),
                                         "대분류": sel_cat, "품목": issue_item,
                                         "출고수량": int(issue_qty), "비고": issue_to
@@ -1112,12 +1114,12 @@ with col_main:
                     elif not df.empty and ((df["대분류"] == final_cat) & (df["품목"] == item_name)).any():
                         st.error(f"'{item_name}'은 이미 등록된 품목입니다.")
                     else:
-                        ("inventory_info", {
+                        sb_insert("inventory_info", {
                             "대분류": final_cat, "품목": item_name, "구매처": vendor,
                             "수량단위": unit, "안전재고": safety_stock,
                             "기본발주수량": default_order_qty, "비고": note
                         })
-                        ("inventory", {
+                        sb_insert("inventory", {
                             "대분류": final_cat, "품목": item_name, "수량단위": unit,
                             "현재고": 0, "안전재고": safety_stock,
                             "최근입고일": "", "최근출고일": ""
@@ -1357,11 +1359,18 @@ with col_main:
                             "처리 완료 후 다시 요청해주세요."
                         )
                     else:
-                        ("order_requests", {
+                        sb_insert("order_requests", {
                             "요청일시": datetime.now().strftime("%Y-%m-%d %H:%M"),
                             "대분류": sel_cat, "품목": sel_item,
                             "요청수량": req_qty, "비고": req_note, "상태": "대기"
                         })
+                        try:
+                            requests.post(st.secrets["POWER_AUTOMATE_URL"], json={
+                                "품목명": f"[{sel_cat}] {sel_item}",
+                                "수량": str(req_qty)
+                            }, timeout=5)
+                        except Exception:
+                            pass
                         st.success(
                             f"✅ [{sel_cat}] **{sel_item}** {req_qty} {unit_val} "
                             "요청이 접수되었습니다!\n\n관리자에게 알림이 전송됩니다."
