@@ -69,7 +69,7 @@ def sb_select(table: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def (table: str, row: dict):
+def sb_insert(table: str, row: dict):
     """단일 행 삽입"""
     row = {k: v for k, v in row.items() if k != "id"}
     try:
