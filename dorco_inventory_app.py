@@ -34,9 +34,9 @@ POWER_AUTOMATE_URL = st.secrets["POWER_AUTOMATE_URL"]
 # ─────────────────────────────────────────────
 params = st.query_params
 if "selected_menu" not in st.session_state:
-if params.get("page") in ("request", "field_request"):
-    st.session_state.selected_menu = "ORDER_REQ"
-    st.session_state.sidebar_open = False
+    if params.get("page") in ("request", "field_request"):
+        st.session_state.selected_menu = "ORDER_REQ"
+        st.session_state.sidebar_open = False
     else:
         st.session_state.selected_menu = "DORCO"
         st.session_state.sidebar_open = True
