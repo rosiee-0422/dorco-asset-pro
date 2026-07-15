@@ -435,23 +435,41 @@ if not IS_REQUEST_PAGE and not st.session_state.is_admin:
 # ─────────────────────────────────────────────
 # 7. 레이아웃
 # ─────────────────────────────────────────────
-top_l, _ = st.columns([1, 9])
-with top_l:
-    if IS_REQUEST_PAGE and not st.session_state.is_admin:
-        # 비밀번호 아이콘만 보여줌
-        with st.popover("🔒"):
-            pw = st.text_input("관리자 비밀번호", type="password", key="admin_pw")
-            if st.button("확인", key="admin_pw_btn"):
-                if pw == "0422":  # Admin Settings랑 같은 비번
+
+# ─────────────────────────────────────────────
+# 6-1. 앱 잠금 — Field Request 외 전체 페이지 보호
+# ─────────────────────────────────────────────
+def render_lock_screen():
+    st.markdown("""
+    <div class="request-hero">
+        <div class="r-logo"></div>
+        <h1>관리자 인증이 필요합니다</h1>
+        <p>이 페이지는 관리자만 접근할 수 있습니다.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    _, mid, _ = st.columns([1, 1.4, 1])
+    with mid:
+        with st.form("lock_form", clear_on_submit=False):
+            pw = st.text_input("관리자 비밀번호", type="password", key="lock_screen_pw")
+            unlock = st.form_submit_button("🔓 잠금 해제", use_container_width=True)
+            if unlock:
+                if pw == ADMIN_PASSWORD:
                     st.session_state.is_admin = True
                     st.session_state.sidebar_open = True
                     st.rerun()
                 else:
-                    st.error("비밀번호가 틀렸습니다.")
-    else:
-        if st.button("☰", key="m_toggle"):
-            st.session_state.sidebar_open = not st.session_state.sidebar_open
+                    st.error("비밀번호가 일치하지 않습니다.")
+
+        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+        if st.button("📢 비품 발주 요청 페이지로 이동", use_container_width=True, key="go_field_request"):
+            st.session_state.selected_menu = "ORDER_REQ"
+            st.session_state.sidebar_open = False
             st.rerun()
+
+if not IS_REQUEST_PAGE and not st.session_state.is_admin:
+    render_lock_screen()
+    st.stop()
 
 if st.session_state.sidebar_open:
     col_side, col_main = st.columns([1.15, 4.85], gap="large")
@@ -1355,7 +1373,7 @@ with col_main:
             st.error("⚠️ 아래 실행 시 모든 재고 현황, 입/출고 내역, 품목 마스터가 영구 삭제됩니다.")
             confirm_pw = st.text_input("관리자 비밀번호 입력", type="password", key="reset_pw")
             if st.button("🚨 전체 데이터 초기화"):
-                if confirm_pw == "0422":
+                if confirm_pw == ADMIN_PASSWORD:
                     for tbl in ["inventory","inventory_info","inventory_in","inventory_out","order_requests"]:
                         try:
                             sb.table(tbl).delete().gt("id", 0).execute()
