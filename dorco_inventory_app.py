@@ -47,6 +47,9 @@ if "selected_submenu" not in st.session_state:
 if "admin_toast_shown" not in st.session_state:
     st.session_state.admin_toast_shown = False
 
+if "is_admin" not in st.session_state:
+    st.session_state.is_admin = False
+
 # ─────────────────────────────────────────────
 # 3-1. 지급형 대분류 설정
 #  · 여기 적힌 대분류는 "지급품 전용 탭(ONBOARDING)"에서만 관리됩니다.
@@ -387,9 +390,21 @@ hr, [data-testid="stDivider"] {{
 # ─────────────────────────────────────────────
 top_l, _ = st.columns([1, 9])
 with top_l:
-    if st.button("☰", key="m_toggle"):
-        st.session_state.sidebar_open = not st.session_state.sidebar_open
-        st.rerun()
+    if IS_REQUEST_PAGE and not st.session_state.is_admin:
+        # 비밀번호 아이콘만 보여줌
+        with st.popover("🔒"):
+            pw = st.text_input("관리자 비밀번호", type="password", key="admin_pw")
+            if st.button("확인", key="admin_pw_btn"):
+                if pw == "0422":  # Admin Settings랑 같은 비번
+                    st.session_state.is_admin = True
+                    st.session_state.sidebar_open = True
+                    st.rerun()
+                else:
+                    st.error("비밀번호가 틀렸습니다.")
+    else:
+        if st.button("☰", key="m_toggle"):
+            st.session_state.sidebar_open = not st.session_state.sidebar_open
+            st.rerun()
 
 if st.session_state.sidebar_open:
     col_side, col_main = st.columns([1.15, 4.85], gap="large")
