@@ -455,6 +455,8 @@ if st.session_state.sidebar_open:
         if st.button("  📤  Outbound"):
             st.session_state.selected_menu = "INOUT"
             st.session_state.selected_submenu = "출고"; st.rerun()
+        if st.button("  📅  입고 캘린더"):
+            st.session_state.selected_menu = "CALENDAR"; st.rerun()
 
         st.markdown("<hr style='border:none;border-top:1px solid #e8e0d0;margin:8px 4px 6px;'>", unsafe_allow_html=True)
         if st.button("  👔  ONBOARDING"):
@@ -604,6 +606,149 @@ with col_main:
             low_df = df_consum[df_consum["현재고"] < df_consum["안전재고"]][["대분류","품목","현재고","안전재고"]].copy()
             low_df["부족수량"] = low_df["안전재고"] - low_df["현재고"]
             st.dataframe(low_df, use_container_width=True, hide_index=True)
+
+    # ══════════════════════════════════════════
+    # 📅 입고 캘린더
+    # ══════════════════════════════════════════
+    elif current == "CALENDAR":
+        import calendar as cal_module
+
+        st.markdown('<p class="page-title">입고 캘린더</p>', unsafe_allow_html=True)
+        st.markdown('<p class="page-sub">언제 무엇을 얼마나 주문했는지 한눈에 확인하세요</p>', unsafe_allow_html=True)
+
+        df_in_cal = sb_select("inventory_in")
+        if not df_in_cal.empty:
+            df_in_cal["입고일자"] = pd.to_datetime(df_in_cal["입고일자"], errors="coerce")
+            df_in_cal = df_in_cal.dropna(subset=["입고일자"])
+            df_in_cal["입고수량"] = pd.to_numeric(df_in_cal["입고수량"], errors="coerce").fillna(0).astype(int)
+            df_in_cal["구매금액"] = pd.to_numeric(df_in_cal["구매금액"], errors="coerce").fillna(0).astype(int)
+
+        if "cal_year" not in st.session_state:
+            st.session_state.cal_year = date.today().year
+        if "cal_month" not in st.session_state:
+            st.session_state.cal_month = date.today().month
+
+        nav1, nav2, nav3, nav4 = st.columns([1, 3, 1, 1.2])
+        with nav1:
+            if st.button("◀ 이전 달", use_container_width=True):
+                st.session_state.cal_month -= 1
+                if st.session_state.cal_month < 1:
+                    st.session_state.cal_month = 12
+                    st.session_state.cal_year -= 1
+                st.rerun()
+        with nav2:
+            st.markdown(
+                f"<h3 style='text-align:center; font-family:Fraunces,serif; font-weight:300; "
+                f"color:#2c2416; margin-top:6px;'>{st.session_state.cal_year}년 {st.session_state.cal_month}월</h3>",
+                unsafe_allow_html=True
+            )
+        with nav3:
+            if st.button("다음 달 ▶", use_container_width=True):
+                st.session_state.cal_month += 1
+                if st.session_state.cal_month > 12:
+                    st.session_state.cal_month = 1
+                    st.session_state.cal_year += 1
+                st.rerun()
+        with nav4:
+            if st.button("오늘로 이동", use_container_width=True):
+                st.session_state.cal_year = date.today().year
+                st.session_state.cal_month = date.today().month
+                st.rerun()
+
+        year  = st.session_state.cal_year
+        month = st.session_state.cal_month
+
+        # 대분류 필터
+        cal_cats = ["전체"]
+        if not df_in_cal.empty and "대분류" in df_in_cal.columns:
+            cal_cats += sorted(df_in_cal["대분류"].dropna().unique().tolist())
+        cal_cat_sel = st.selectbox("대분류 필터", cal_cats, key="cal_cat_filter")
+
+        if not df_in_cal.empty:
+            month_records = df_in_cal[
+                (df_in_cal["입고일자"].dt.year == year) & (df_in_cal["입고일자"].dt.month == month)
+            ].copy()
+        else:
+            month_records = pd.DataFrame()
+
+        if cal_cat_sel != "전체" and not month_records.empty:
+            month_records = month_records[month_records["대분류"] == cal_cat_sel]
+
+        # 일자별 품목 리스트 구성
+        day_items = {}
+        if not month_records.empty:
+            for _, row in month_records.iterrows():
+                d = row["입고일자"].day
+                day_items.setdefault(d, []).append(f"{row['품목']} ×{int(row['입고수량'])}")
+
+        cal_module.setfirstweekday(cal_module.SUNDAY)
+        month_matrix = cal_module.monthcalendar(year, month)
+        weekdays_kr  = ["일", "월", "화", "수", "목", "금", "토"]
+        today_d      = date.today()
+
+        cal_html = """
+        <style>
+        .cal-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 12px; }
+        .cal-table th {
+            font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+            color: #b8ad9e; padding: 8px 4px; border-bottom: 1px solid #e8e0d0; text-align: left;
+        }
+        .cal-table td {
+            vertical-align: top; height: 96px; border: 1px solid #e8e0d0;
+            padding: 6px; background: #fff9ef;
+        }
+        .cal-day-num { font-family: 'DM Mono', monospace; font-size: 12px; color: #8a7d6b; margin-bottom: 4px; }
+        .cal-empty { background: #f5f0e8 !important; }
+        .cal-badge {
+            display: block; font-size: 10.5px; color: #2c2416; line-height: 1.5;
+            background: rgba(192,124,58,0.12); border: 1px solid rgba(192,124,58,0.25);
+            border-radius: 6px; padding: 2px 5px; margin-bottom: 3px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .cal-today { box-shadow: inset 0 0 0 2px #c07c3a; }
+        .cal-today .cal-day-num { color: #c07c3a; font-weight: 700; }
+        </style>
+        <table class="cal-table"><thead><tr>
+        """
+        for w in weekdays_kr:
+            cal_html += f"<th>{w}</th>"
+        cal_html += "</tr></thead><tbody>"
+
+        for week in month_matrix:
+            cal_html += "<tr>"
+            for day_num in week:
+                if day_num == 0:
+                    cal_html += "<td class='cal-empty'></td>"
+                else:
+                    is_today   = (year == today_d.year and month == today_d.month and day_num == today_d.day)
+                    cell_class = "cal-today" if is_today else ""
+                    cal_html  += f"<td class='{cell_class}'><div class='cal-day-num'>{day_num}</div>"
+                    items = day_items.get(day_num, [])
+                    for it in items[:4]:
+                        cal_html += f"<span class='cal-badge'>{it}</span>"
+                    if len(items) > 4:
+                        cal_html += f"<span class='cal-badge'>+{len(items) - 4}건 더보기</span>"
+                    cal_html += "</td>"
+            cal_html += "</tr>"
+        cal_html += "</tbody></table>"
+
+        st.markdown(cal_html, unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown('<p class="section-heading">이 달의 입고 상세</p>', unsafe_allow_html=True)
+        if month_records.empty:
+            st.info("이 달에는 입고 기록이 없습니다.")
+        else:
+            show = month_records.copy()
+            show["입고일자"] = show["입고일자"].dt.strftime("%Y-%m-%d")
+            st.dataframe(
+                show[["입고일자","대분류","품목","입고수량","구매금액"]].sort_values("입고일자", ascending=False),
+                use_container_width=True, hide_index=True,
+                column_config={
+                    "구매금액": st.column_config.NumberColumn(format="%d 원"),
+                    "입고수량": st.column_config.NumberColumn(format="%d"),
+                }
+            )
 
     # ══════════════════════════════════════════
     # 📦 STOCK BOARD
