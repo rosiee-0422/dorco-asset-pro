@@ -452,11 +452,11 @@ if st.session_state.sidebar_open:
         if st.button("  📥  Inbound"):
             st.session_state.selected_menu = "INOUT"
             st.session_state.selected_submenu = "입고"; st.rerun()
+        if st.button("  📅  입고 캘린더"):
+            st.session_state.selected_menu = "CALENDAR"; st.rerun()
         if st.button("  📤  Outbound"):
             st.session_state.selected_menu = "INOUT"
             st.session_state.selected_submenu = "출고"; st.rerun()
-        if st.button("  📅  입고 캘린더"):
-            st.session_state.selected_menu = "CALENDAR"; st.rerun()
 
         st.markdown("<hr style='border:none;border-top:1px solid #e8e0d0;margin:8px 4px 6px;'>", unsafe_allow_html=True)
         if st.button("  👔  ONBOARDING"):
